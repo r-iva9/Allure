@@ -1,0 +1,64 @@
+
+:root {
+
+  --vp-c-brand-1: #ff0040;  /* Main theming */
+  --vp-c-brand-2: #c50b3a;
+
+  --vp-button-brand-bg: #db1122;
+  --vp-button-brand-hover-bg: #8d102b;
+  --vp-button-brand-press-bg: #ff0040;
+  --vp-button-alt-bg: #d4d0db;
+
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: -webkit-linear-gradient(
+    120deg,
+    #4559b1,
+    #ff0040
+  );
+
+  --vp-c-bg: #eae9ec;
+  --vp-c-bg-alt: #e6dce0;
+  --vp-c-bg-elv: #eae9ec;
+  --vp-c-bg-soft: #e3e0e7;
+
+  --vp-custom-block-tip-bg: #910e39;
+
+  --vp-c-border: #b8b2be;
+  --vp-c-gutter: #d7cfe6;
+  --vp-plugin-tabs-tab-bg: var(--vp-c-bg);
+}
+
+.dark {
+	--vp-c-bg: #171318;
+	--vp-c-bg-alt: #1e1820;
+	--vp-c-bg-elv: #1d161f;
+    --vp-c-bg-soft: #1a171e;
+    --vp-button-alt-bg: #29272c;
+
+	--vp-c-border: #181222;
+    --vp-c-gutter: #211f24;
+}
+
+@media (min-width: 640px) {
+    [data-v-72cc4481] .image-src {
+        max-width: 400px;
+        max-height: 256px;
+    }
+}
+
+@media (min-width: 960px) {
+    [data-v-72cc4481] .image-src {
+        padding-left: 100px;
+        max-width: 480px;
+        max-height: 320px;
+    }
+}
+
+.VPHero {
+  padding-top: 220px !important;
+  padding-bottom: 70px !important;
+}
+
+.VPFeatures {
+    padding-bottom: 10px !important;
+}

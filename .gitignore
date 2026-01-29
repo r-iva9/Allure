@@ -12,3 +12,4 @@ wally.lock
 rokit.toml
 stylua.toml
 node_modules
+docs/.vitepress/cache

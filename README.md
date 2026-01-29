@@ -16,18 +16,12 @@
   
 </div>
 
-> [!NOTE]
-> ### *Allure is a fresh project*
-> Allure has major plans for the upcoming features. </br>
-> There are several instances of unfinished documentation, code, and issues.
-> ### *What to expect*
-> * AllureActor and extensions for MVC
-> * Selectors
-> * Memoizing
-
 > [!IMPORTANT]
-> Any of the frameworks inside Allure can be removed if you don't need it's features. </br>
-> Allure itself interconnects all of them and provides useful utils that some of them use.‎‎‎‎‎
+> <h2>Allure is 0.1.0 software</h2>
+> This means that Allure has unfinished documentation, overlooked issues and bugs.
+> 
+> Modding and utilizing Allure as a "meta-framework" over any UI framework is currently being worked on.<br>
+> As of right now, you can use *5 preset frameworks/libraries* within the Allure container.
 
 # 🍃 *AllureUI*
 - ## *<ins>Amplified Tables</ins>: The Powerful Core to UI*
@@ -241,5 +235,5 @@
 ---
 
 ## License
-Allure is freely shared with the MIT License.
+Allure is shared and released with the MIT License.
 </br>Give me a shoutout if you want!

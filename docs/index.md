@@ -4,30 +4,27 @@ layout: home
 
 hero:
   name: "Allure"
-  text: "Reactive Framework of Frameworks for the Roblox Metaverse."
-  tagline: "tagline tagline tagline tagline tagline tagline tagline tagline tagline tagline tagline tagline"
+  text: ""
+  tagline: "Reactive Framework of Frameworks for the Roblox Metaverse."
   image:
-    src: /logo.svg
+    src: /biglogo.svg
     alt: Allure logo
   actions:
     - theme: brand
       text: Get Started
-      link: /install
+      link: /course/introduction/intro
     - theme: alt
-      text: Try it out
-      link: /playground
+      text: Examples
+      link: /course/introduction/intro
 
 features:
-  - title: 1title
-    icon: 📦
-    details: 1
-  - title: 2title
-    icon: ⚡
-    details: 2
-  - title: 3title
-    icon: 🧑‍💻
-    details: 3
-  - title: 4title
-    icon: 🔒
-    details: 4
+  - title: Componentized
+    icon: 🧩
+    details: Allure interconnects multiple frameworks, any of which can be removed.
+  - title: Powerful
+    icon: 💥
+    details: Allure provides a low level customizable API, extensible for any purpose.
+  - title: Fullstack
+    icon: 💠
+    details: Allure's features focus on reusability and extension suitable for both, client and server.
 ---
