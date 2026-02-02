@@ -3,7 +3,7 @@
 --!native
 
 --[[
-    ALLURE META-FRAMEWORK
+    ALLURE ACTOR METAFRAMEWORK
     By r_iva9
 
     API
@@ -17,331 +17,246 @@
     ...
 ]]
 
---[[ () -> (A, B) ---> T{A | B} ]]
-type function _pack(A: type)
-	local indexedTypes: { [any]: type } = A:returns().head :: { [number]: type }
-    local t = types.newtable()
+------------
+-- TYPES
 
-    --WARNING: THIS LINE PREVENTS THE TYPESOLVER FROM CRASHING DUE TO TYPE FUNCTION RECURSION!
-    if not indexedTypes or #indexedTypes == 0 then return t end
+-- Utility type to fill the luau table type blank
+type table = { [any]: any }
 
-	local valueType = types.unionof(unpack(indexedTypes))
+-- Utility type fuction to merge 2 table types
+type function Merge(a: type, b: type)
+	local result = types.newtable()
 
-	t:setindexer(types.number, valueType) --unpack(indexedTypes) :: type))
-
-	return t
-end
-
---[[ T{A | B} ---> (A, B) ]]
-type function _unpack(A: type)
-	return (A:indexer() :: any).readresult :: any
-end
-
---[[ (A, B) ---> T{A | B} ]]
-type pack<P...> = _pack<() -> P...>
-
---[[ () -> (A, B) ---> () -> (Package<A> | Package<B>) ]]
-type function _Dependency_pack_function(A: type)
-	local indexedTypes: { type } = A:returns().head :: { type }
-
-    --WARNING: THIS LINE PREVENTS THE TYPESOLVER FROM CRASHING DUE TO TYPE FUNCTION RECURSION!
-    if not indexedTypes or #indexedTypes == 0 then return A end
-
-	for key, type0 in indexedTypes do
-        --Allure claims dependencies of package dependencies to be none, otherwise would meet squared type packs and typesolver crashes
-        --Only contents matter
-		indexedTypes[key] = Package(type0)
+	local indexer = b:indexer()
+	if indexer ~= nil then
+		result:setreadindexer(indexer.index, indexer.readresult)
+		result:setwriteindexer(indexer.index, indexer.writeresult)
 	end
 
-	local f = types.newfunction()
-	f:setparameters(indexedTypes)
-	f:setreturns(indexedTypes)
+	for key, prop in a:properties() do
+		if prop.read ~= prop.write then
+			result:setreadproperty(key, prop.read)
+			result:setwriteproperty(key, prop.write)
+		else
+			result:setproperty(key, prop.read)
+		end
+	end
 
-	return f
+	for key, prop in b:properties() do
+		if prop.read ~= prop.write then
+			result:setreadproperty(key, prop.read)
+			result:setwriteproperty(key, prop.write)
+		else
+			result:setproperty(key, prop.read)
+		end
+	end
+
+	return result
 end
 
--- Luau obliges to create this object otherwise I literally cannot use the type function lol
-local _: _Dependency_pack_function<() -> (nil, nil)>
+-- Utility type function that lets type functions reference the table type
+-- Sort of a hack
+type tabler<A> = table
 
-type _Dependency_pack<P...> = _Dependency_pack_function<() -> P...>
-type DEPENDENCIES<P...> = _pack<_Dependency_pack_function<() -> P...>>
-
---local b: DEPENDENCIES<{a: number}, {a: string}> = {{a = 1} :: Package<{a: number}>, {a = "text"} :: Package<{a: string}>}
--- local pack: Package<{test: number}, {a: number}> = {} :: any
-
-export type function tablemerger(T: type, V: type)
-    local t = types.newtable()
-
-    for k, v in T:properties() do
-        t:setproperty(k, v.read)
-    end
-    for k, v in V:properties() do
-        t:setproperty(k, v.read)
-    end
-
-    return t
+-- Utility type function that sets the metatable of type A to table
+-- Unfortunately luau does not let us to extract the metatable basis
+type function metabasis(A: type) 
+	--A:setmetatable(tabler(types.any))
+	return A
 end
 
---[[
-    the technical type that turns tuples into unions is done
-    you can use it to make a function that does intersections or merges each item with something
+--[=[
+    This is the type of unregistered containers.
+	<br>However as the tables have to remain unsealed this is not used and can only assist in custom type checking.
 
-    you right now need a type for dependencies
-    with metadata
+    Format: `UnregisteredContainer<Content, Metadata>`
+]=]
+export type UnregisteredContainer<T, V> = setmetatable<
+	T,
+	{ --T & {__index: T}, {
+		__containerref: T,
+		__containermeta: V,
+		__index: setmetatable<{
+			UseDependency: <S, M>(self: S, singleton: M) -> M,
+			SetPriority: <S>(self: S, priority: number) -> S,
+			ModifyMeta: <S>(self: S, override: table) -> S,
+		}, {__index: V}>,
+	}
+>
 
-    idea:
+--[=[
+    Registered container metadata.
+    <br>Registered containers can be used as Dependencies for other containers.
+]=]
+export type Container = {
+	read Name: string,
+	read Version: string,
+	read Description: string,
 
-    > local dependency1, dependency2 = Allure:Package(Name, {Dependency1, Dependency2}, priority?)
-    < [ERROR: ALLURE] Cannot create package "Name": Cyclic dependency detected (Dependency1 --> Name)
+	read Dependencies: { unknown },
+	read Priority: number,
 
-    creating a new package (like npm, wally) then register it into the dependency tree
-    in the tree it is linked to branches of dependencies forming a tree for each package
-    (which makes it easier to)
-
-    these packages are registered right when they are required so it's no problem
-
-    then you need a way to inject the table into the package (register it; like you create a new package with dependencies given and then register it)
-
-    PROGRESS:
-
-    THE PACKAGE TYPING IS DONE!
-    For example Package<{}, {}, {}>
-    The first list is the contents of the package, second is the content of the first dependency, third is the content of the second dependency;
-    AS MANY DEPENDENCIES as you want
-
-    Allure:Package(dep1, dep2) {
-        Name = "script name default",
-        Type = "Framework", --default to provider
-        Version = {1, 0, 0} --becomes read-only and assigns keys major, minor, patch
-        PATH = "/Folder/" --/ by default, allows loading in groups but when listing dependencies the first / is unneeded
-        --^^^ might be scrapped if cant return the content type
-    }
-
-    tr = Allure:DependencyTree()
-    tr:ApplyDescendants(fn)
-    tr:LoadDescendants(predicateFn)
-]]
-
--- Utility type that fills the luau table type blank
-type table = {[any]: any}
-
---[[
-    Unregistered package type with customizable metadata.
-    <br>This object assists with creating and modifying a package that is about to be registered.
-
-    Format: UnregisteredPackage\<Content>
-    <br>The created Dependencies inside of the type lists dependencies context turned into packages each
-]]
-export type UnregisteredPackage<T> = setmetatable<T, {
-    __packageref: T,
-    __index: {
-        UseDependency: <S, M>(self: S, singleton: M) -> M,
-        SetPriority: <S>(self: S, priority: number) -> S,
-        ModifyMeta: <S>(self: S, override: table) -> S
-    }
-}>
-
---[[
-    Registered package type with readonly metadata.
-    <br>Registered packages can be used as Dependencies for other packages.
-
-    Format: Package\<Content>
-]]
-export type Package<T> = T & {
-    read Name: string,
-    read Version: string,
-    read Description: string,
-
-	read Dependencies: { Package<unknown> },
-    read Priority: number,
-
-	--[[ Decides whether the client can require() the package or have it as a dependency ]]
+	--[[ Decides whether the client can require() the container or have it as a dependency ]]
 	read Client: boolean,
 }
 
-local REGISTERED: {[string]: unknown}
+--[[ Creates an ActorPool and a Master giving the task for consumption of the actor with lowest workload ]]
+--ActorPool: number?,
+--ActorQueryLimit: number?,
 
---T is the metadata; Content = {}
---Returns the package and a tail of dependency packages
---type PackageConstructor = <A, B, C, D, E, F, G, H, I, J, K, L, M, 
---    N, O, P, Q, R, S, T, U, V, W, X, Y, Z>(...string) -> <T, Name>(T & {Name: Name | "", [string]: any?}) -> (Package<T, Name>)--, _unpack<DEPENDENCIES<A, B, C, D, E, F, G, H, I, J, K, L, M, 
-    --N, O, P, Q, R, S, T, U, V, W, X, Y, Z>>)
-
---Replaces package content type
---type PackageRegister = <T, Name>(Package<any, Name>, T, number?) -> (Package<T, Name>, typeof(REGISTERED) & {[Name]: Package<T>})
-
-
-	--[[ Creates an ActorPool and a Master giving the task for consumption of the actor with lowest workload ]]
-	--ActorPool: number?,
-	--ActorQueryLimit: number?,
-
-	--[[ Unreleased ]]
-	--ActorErrorHook: (...any) -> ...any?,
-	--ActorTimeoutHook: (number) -> (...any) -> ...any?,
-	--ActorMaster: (...any) -> ...any?,
-
+--[[ Unreleased ]]
+--ActorErrorHook: (...any) -> ...any?,
+--ActorTimeoutHook: (number) -> (...any) -> ...any?,
+--ActorMaster: (...any) -> ...any?,
 
 --[[
+    CONTENT
+--]]
 
+------------
+-- UTILITY
 
+--[[
+    Utility table merger.
+    <br>Takes 2 tables, modifies and returns the first one
 
---[[ 
+    Does not perform cloning or deepcloning
+    <br>This becomes suitable for dependencies hence the singletons
+]]
+function lowmerge<T, V>(t0: T, t1: V): T & V --: Merge<T, V>
+	for k, v in pairs(t1) do
+		(t0 :: any)[k] = v
+	end
+	return t0
+end
 
-//// CONTENT 
+--[[
+    Counts all dependencies and nested dependencies within t0
+]]
+function depcount<T>(t0: T & { Dependencies: any? }): number
+	local amount = #(t0.Dependencies or {})
+	for _, dep in t0.Dependencies or {} do
+		amount += depcount(dep)
+	end
+	return amount
+end
 
+--- Utility function to seal an unsealed table
+function sealTable<T>(t: T): T
+	return t
+end
+
+------------
+-- ALLURE
 
 local Allure = {}
 
-REGISTERED = {} :: any
+--[=[
+    Creates a workspace for container creation and modification.
+    <br>Returns an unregistered container that can be registered.
 
---Low level table merger function
---They match key and value types
-local function lowMerge<K, V>(t0: {[K]: V}, t1: {[K]: V}): {[K]: V}
-    for k,v in t1 do
-        t0[k] = v
-    end
-    return t0
+    This container cannot be used in dependencies of other containers, has a utility metatable and mutable metadata.
+
+    This is a triple function to segregate parameters and syntactic sugar.
+
+	---
+
+	@param ... &emsp; `(containers)` &emsp; = &emsp; *Dependency containers*
+	@param -> content &emsp; `(table)` &emsp; = &emsp; *For the second function, pass the content table. This table remains unsealed*
+	@param -> -> meta &emsp; `(table)` &emsp; = &emsp; *For the third function, pass the initial metadata. It is mutable before registration*
+	@return `UnregisteredContainer<typeof(content), V>`      &emsp; = &emsp; *Unregistered container: a workspace for container creation with utilities*
+]=]
+function Allure:Container<A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S>(
+	A: A?, B: B?, C: C?, D: D?, E: E?, 
+	F: F?, G: G?, H: H?, I: I?, J:J?, 
+	K: K?, L: L?, M: M?, N: N?, O: O?, 
+	P: P?, Q: Q?, R: R?, S: S?
+) --: <V>(V & table) -> (UnregisteredContainer<{}, V>, P...)
+	local containers = {A, B, C, D, E, F, G, H, I, J, K, L, M, M, O, P, Q, R, S}
+
+	return function<T>(content: T)
+		(content :: any).__index = content --for classes, this remains the table unsealed
+
+		return function<V>(meta: V & table) --: (UnregisteredContainer<{}, V>, P...)
+			(content :: any).___meta = meta --this remains the table unsealed
+
+			local container = setmetatable( --: UnregisteredContainer<{}, V>
+				content,
+				{
+					__containerref = content,
+					__containermeta = lowmerge(meta, { --modifies meta
+						Dependencies = containers,
+					}) :: V,
+					__call = function()
+						return content
+					end,
+					__index = setmetatable({
+						UseDependency = function<S, M>(self: S, singleton: M): M
+							meta.Dependencies[#meta.Dependencies + 1] = singleton
+							return singleton
+						end,
+						SetPriority = function<S>(self: S, priority: number): S
+							meta.Priority = priority
+							return self
+						end,
+						ModifyMeta = function<S>(self: S, override: table): S
+							lowmerge(meta, override)
+							return self
+						end,
+					}, {__index = meta}), --third layer __index to reference metadata
+				}
+			)
+
+			return container, A :: A, B :: B, C :: C, D :: D, E :: E, 
+				F :: F, G :: G, H :: H, I :: I, J :: J, K :: K, L :: L, 
+				M :: M, N :: N, O :: O, P :: P, Q :: Q, R :: R, S :: S --table.unpack(containers)
+		end
+	end
 end
-
---Low level table merger function that merges only non-shared keys
-local function exceptionalLowMerge<K, V>(t0: {[K]: V}, t1: {[K]: V}): {[K]: V}
-    for k,v in t1 do
-        t0[k] = t0[k] or v
-    end
-    return t0
-end
-
-local function tableToVersion(t0: {[number]: number})
-    return {
-        Major = t0[1],
-        Minor = t0[2],
-        Patch = t0[3]
-    }
-end
-
-local function singleton<T>(val: T | ""): T
-    return val
-end
-
-local PackageConstructor: PackageConstructor = function<A, B, C, D, E, F, G, H, I, J, K, 
-    L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z>(...: string)
-    local dep: any = {...}
-    for k, v in dep do
-        dep[k] = REGISTERED[v]
-    end
-
-    local depcontents = {}
-    for i=1, 26 do
-        depcontents[i] = dep[i] or nil
-    end
-    
-    -- !!!!
-    --remove all of these ABCD and keep Dependencies generic
-    --then do index<> on it
-    --remember keyof<> too
-
-    local a: A, b: B, c: C, d: D, e: E, f: F, g: G, h: H, i: I, j: J, k: K, l: L, 
-          m: M, n: N, o: O, p: P, q: Q, r: R, s: S, t: T, u: U, v: V, w: W, x: X, y: Y, z: Z = table.unpack(depcontents)
-
-    local D: DEPENDENCIES<typeof(a), typeof(b), typeof(c), typeof(d), typeof(e), typeof(f), typeof(g), typeof(h), typeof(i), 
-                              typeof(j), typeof(k), typeof(l), typeof(m), typeof(n), typeof(o), typeof(p), typeof(q), typeof(r), 
-                              typeof(s), typeof(t), typeof(u), typeof(v), typeof(w), typeof(x), typeof(y), typeof(z)> = dep
-
-    return function<T, Name>(meta: T & {Name: Name | "", [string]: any})
-        
-        local self: Package<T> = exceptionalLowMerge(meta, {
-            Name = script.Name,
-            Version = tableToVersion(meta.Version or {1, 0, 0}),
-            Dependencies = D,
-            Type = "Provider",
-            Priority = 0,
-
-            Client = true
-        })
-
-        return self
-    end
-end :: PackageConstructor
-
-local PackageRegister: PackageRegister = function<P, T>(pack: Package<P>, content: T & { }, priority: number?)
-    pack = lowMerge(pack :: T, content) :: any
-    REGISTERED[pack.Name :: typeof(pack.Name)] = pack :: Package<T>
-
-    local REGISTERED2 = (REGISTERED :: typeof(REGISTERED) & {[typeof(pack.Name)]: Package<T>})
-
-    return pack :: Package<{P & T}>, REGISTERED2
-end :: PackageRegister
 
 --[[
-    Registers `package` -- saves it's contents under a specific name.
-
-    Registered packages can be used as dependencies for other packages.
+    Registers an unregistered container.
+    <br>A registered container has immutable metadata, which is merged with the singleton, and can be used as a dependency.
 
     ---
-    @param package      `(Package)` </br> = &emsp; *The package to register.*
-    @param content      `(table)` </br> = &emsp; *Contents that the package will have. Does not freeze the table.*
-    @param priority      `(number?)` </br> = &emsp; *Optional amount of priority that will be added to the calculated priority.*
+    @param `container`      `(Unregisteredcontainer)` &emsp; = &emsp; *The unregistered container*
 
-    @return `Package`      </br> = &emsp; *The package with assigned contents.*
-]
-function Allure:RegisterPackage<T>(package: Package<unknown>, content: T, priority: number?): Package<T>
-    local Pack, Registered = PackageRegister(package, content, priority)
-
-    REGISTERED = Registered
-    return Pack
-end
-
---ATTEMPTING TO CREATE & REGISTER A DEP
-
---local Pack = PackageConstructor() {Name = "Test"}
-
-
---[[local p, c = PackageRegister(Pack, {
-    a = 10
-})
-REGISTERED = c
-
---This commented out test gives REGISTERED a good type: it has Test
+    @return `Container<T>`      &emsp; = &emsp; *Registered container*
 ]]
+function Allure:Register<T, V, R>(
+	container --& { __index: T, ___meta: V & { Descriptions: table? } }
+) --: MetatableLess<T> --Container<T>
 
---[[
-    So currently Name | "" works but it has to be optional somehow
-    I also need to find out about dependencies type and remove the ABCD shit from constructor type
+	--type sealedContainer = typeof(sealTable(container))
 
-]
+	--local containermt = getmetatable(sealTable(container))
+	--containermt = containermt :: typeof(containermt)
 
---Allure:RegisterPackage(Pack, {a = 10}, priority) --SOLVE THIS AND organize code
+	--type a = getmetatable<setmetatable<{}, {a: number}>>
 
---C HAS TEST!
+	--type returnType = typeof(containermt.__containerref)--typeof(setmetatable({} :: sealedContainer, nil)) --metabasis<sealedContainer>
 
---local newPack, TEST = PackageConstructor("Test") {}
+	--typesolver fails at passing argument setmetatable<>s with a base of generic T
+	--so I have to retype T and V onto the metatable of `container` with correct types of references
+	local containermt = getmetatable(container :: T) :: V & {__containerref: T & table & {Descriptions: table?}, __containermeta: V & table} & getmetatable<UnregisteredContainer<{}, V>>
 
-local b = REGISTERED["Test"]
+	return lowmerge(
+		lowmerge(
+			--lowmerge({}, container :: T), --1. reference singleton
+			container,
+			{
+				Name = script.Name, --2. default metadata
+				Version = "1.0.0",
+				Description = "",
 
-local a: typeof(REGISTERED)
+				Dependencies = {},
+				Priority = -depcount(containermt.__containermeta.Descriptions or {} :: table), --counts nested dependencies
 
-
--- out of code example
-
-local tab = {
-    a = 20
-}
-
-local function test<Name, V, t>(t: t & {}, key: Name | "", val: V): t & {[Name]: V}
-    t[key] = val
-    return t --tab
+				Client = true,
+			} :: never
+		),
+		containermt.__containermeta :: Container
+	) --3. given metadata
 end
 
-local function test2<Name, V, t>(t: t & {}, key: Name | "", val: V)
-    tab = test(t, key, val)
-end
-local tab2 = test(tab, "abc", 10)
-
-test2(tab, "abc", 20)
-
-local a = tab
-
---result: test returns the CORRECT typing that i need
---test2 doesn't do anything
-
-]]
+return Allure
