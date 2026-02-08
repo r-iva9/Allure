@@ -20,11 +20,15 @@
 ------------
 -- TYPES
 
--- Utility type to fill the luau table type blank
+--- Utility type to fill the luau table type blank
 type table = { [any]: any }
 
--- Utility type fuction to merge 2 table types
+--- Utility type fuction to merge 2 table types
 type function Merge(a: type, b: type)
+	if not b:is "table" then
+		return a
+	end
+
 	local result = types.newtable()
 
 	local indexer = b:indexer()
@@ -54,64 +58,130 @@ type function Merge(a: type, b: type)
 	return result
 end
 
--- Utility type function that lets type functions reference the table type
--- Sort of a hack
+--- Utility type function that lets type functions reference the table type
+--- <br>Sort of a hack
 type tabler<A> = table
 
--- Utility type function that sets the metatable of type A to table
--- Unfortunately luau does not let us to extract the metatable basis
-type function metabasis(A: type) 
-	--A:setmetatable(tabler(types.any))
-	return A
-end
-
 --[=[
-    This is the type of unregistered containers.
+    This is the type of unregistered Nodes.
 	<br>However as the tables have to remain unsealed this is not used and can only assist in custom type checking.
 
-    Format: `UnregisteredContainer<Content, Metadata>`
+    Format: `UnregisteredNode<Content, Metadata>`
 ]=]
-export type UnregisteredContainer<T, V> = setmetatable<
+export type UnregisteredNode<T, V> = setmetatable<
 	T,
 	{ --T & {__index: T}, {
-		__containerref: T,
-		__containermeta: V,
+		__Noderef: T,
+		__Nodemeta: V,
 		__index: setmetatable<{
 			UseDependency: <S, M>(self: S, singleton: M) -> M,
 			SetPriority: <S>(self: S, priority: number) -> S,
 			ModifyMeta: <S>(self: S, override: table) -> S,
-		}, {__index: V}>,
+			GetDependencyCount: <S>(self: S) -> number,
+		}, { __index: V }>,
 	}
 >
 
 --[=[
-    Registered container metadata.
-    <br>Registered containers can be used as Dependencies for other containers.
+    Registered Node metadata.
+    <br>Generally the type for registered Nodes is T & Node
 ]=]
-export type Container = {
+export type Node = {
 	read Name: string,
 	read Version: string,
 	read Description: string,
+	read Author: string,
+	read License: string,
 
 	read Dependencies: { unknown },
 	read Priority: number,
 
-	--[[ Decides whether the client can require() the container or have it as a dependency ]]
+	--- Decides whether the client can require() the Node or have it as a dependency
 	read Client: boolean,
+
+	--- Mutable tags of the Node
+	Tags: { [any]: any },
+
+	--- Children Nodes
+	Nodes: { [Instance]: Node },
+
+	Instance: Instance,
 }
 
---[[ Creates an ActorPool and a Master giving the task for consumption of the actor with lowest workload ]]
---ActorPool: number?,
---ActorQueryLimit: number?,
+--[=[
+    The type of each and any dependency tree
+	<br>Node tree nodes have the Node type
+]=]
+export type NodeTree = {
+	Parent: Instance,
+	Tree: { [Instance]: Node },
 
---[[ Unreleased ]]
---ActorErrorHook: (...any) -> ...any?,
---ActorTimeoutHook: (number) -> (...any) -> ...any?,
---ActorMaster: (...any) -> ...any?,
+	---// Basic Methods //
 
---[[
-    CONTENT
---]]
+	--- Returns all modulescript nodes in the tree without nests and folder nodes
+	--- To apply basic tree methods use SliceNonmodules
+	GetModuleNodes: (self: NodeTree) -> { [Instance]: Node },
+
+	--- Returns all folder nodes in the tree
+	--- To apply basic tree methods use SliceNonfolders
+	GetFolderNodes: (self: NodeTree) -> { [Instance]: Node },
+
+	--- Calls a function for each node of the tree.
+	ForEach: (self: NodeTree, fn: (self: NodeTree, Node: Node) -> ...any?) -> NodeTree,
+
+	--- Calls a function for all tree nodes.
+	ForAll: (self: NodeTree, fn: (self: NodeTree, Nodes: { [Instance]: Node }) -> ...any?) -> NodeTree,
+
+	--- Calls a function for each tree node with a specific tag
+	ForEachTagged: (self: NodeTree, tag: any, fn: (self: NodeTree, Node: Node) -> ...any?) -> NodeTree,
+
+	--- Calls a function for all tree nodes with a specific tag
+	ForAllTagged: (
+		self: NodeTree,
+		tag: any,
+		fn: (self: NodeTree, Nodes: { [Instance]: Node }) -> ...any?
+	) -> NodeTree,
+
+	--- Sorts surface level nodes by setting their indices to whatever the function on the node returns
+	Sort: (self: NodeTree, fn: (node: Node, shared: table) -> number) -> NodeTree,
+
+	---// Loader Methods //
+
+	--- Loads children nodes into the tree
+	LoadChildren: (self: NodeTree) -> NodeTree,
+
+	--- Loads nodes from a different tree
+	LoadFromTree: (self: NodeTree, tree: NodeTree) -> NodeTree,
+
+	---// Merging //
+
+	--- Merges 2 dependency trees.
+	Merge: (self: NodeTree, merger: NodeTree) -> NodeTree,
+
+	---// Slicing //
+
+	--- Creates a **new** dependency tree by slicing the existing tree nodes having which the function returns false
+	SlicePredicate: (self: NodeTree, predicate: (self: NodeTree, node: Node) -> boolean) -> NodeTree,
+
+	--- Creates a **new** dependency tree with all of the modules at the surface level
+	SliceNonModules: (self: NodeTree) -> NodeTree,
+
+	--- Creates a **new** dependency tree with all of the folders at the surface level
+	SliceNonFolders: (self: NodeTree) -> NodeTree,
+
+	--- Creates a **new** dependency tree by slicing the specified node
+	SliceNode: (self: NodeTree, node: Node) -> NodeTree,
+
+	--- Creates a **new** dependency tree by slicing the existing tree nodes parented above a specific child
+	SliceFromChild: (self: NodeTree, child: Instance) -> NodeTree,
+
+	--- Creates a **new** dependency tree by slicing the existing tree nodes with a specific tag *present* and/or with a *specific type* and/or with a *specific value*
+	SliceTagged: (self: NodeTree, tag: any, valueType: string?, value: any?) -> NodeTree,
+}
+
+---//
+---//    CONTENT
+---//
 
 ------------
 -- UTILITY
@@ -123,69 +193,89 @@ export type Container = {
     Does not perform cloning or deepcloning
     <br>This becomes suitable for dependencies hence the singletons
 ]]
-function lowmerge<T, V>(t0: T, t1: V): T & V --: Merge<T, V>
+function lowmerge<T, V>(t0: T, t1: V): T & V --Merge<T, V>
 	for k, v in pairs(t1) do
 		(t0 :: any)[k] = v
 	end
 	return t0
 end
 
---[[
-    Counts all dependencies and nested dependencies within t0
-]]
-function depcount<T>(t0: T & { Dependencies: any? }): number
-	local amount = #(t0.Dependencies or {})
-	for _, dep in t0.Dependencies or {} do
-		amount += depcount(dep)
+--- Counts all dependencies and nested dependencies within t0
+function depcount<T>(dependencies: { any }): number
+	local amount = #dependencies
+	for _, dep in dependencies do
+		amount += dep.Dependencies and depcount(dep.Dependencies) or 0
 	end
 	return amount
 end
 
---- Utility function to seal an unsealed table
-function sealTable<T>(t: T): T
-	return t
-end
+--- Logging
+local Log = {
+	Warn = function(...)
+		local stack =
+			debug.traceback("\n\n\t\t---------\t--------- \t\t\tStack Traceback\t\t\t ---------\t---------\t", 2)
+		warn(... .. if stack then stack else "")
+	end,
+	Error = error,
+}
 
 ------------
 -- ALLURE
 
+local RegisteredNodes: { [Instance]: Node } = {}
+
 local Allure = {}
 
 --[=[
-    Creates a workspace for container creation and modification.
-    <br>Returns an unregistered container that can be registered.
+    Creates a workspace for Node creation and modification.
+    <br>Returns an unregistered Node that can be registered.
 
-    This container cannot be used in dependencies of other containers, has a utility metatable and mutable metadata.
+    This Node cannot be used in dependencies of other Nodes, has a utility metatable and mutable metadata.
 
     This is a triple function to segregate parameters and syntactic sugar.
 
 	---
 
-	@param ... &emsp; `(containers)` &emsp; = &emsp; *Dependency containers*
+	@param ... &emsp; `(Nodes)` &emsp; = &emsp; *Dependency Nodes*
 	@param -> content &emsp; `(table)` &emsp; = &emsp; *For the second function, pass the content table. This table remains unsealed*
 	@param -> -> meta &emsp; `(table)` &emsp; = &emsp; *For the third function, pass the initial metadata. It is mutable before registration*
-	@return `UnregisteredContainer<typeof(content), V>`      &emsp; = &emsp; *Unregistered container: a workspace for container creation with utilities*
+	@return `UnregisteredNode<typeof(content), V>`      &emsp; = &emsp; *Unregistered Node: a workspace for Node creation with utilities*
 ]=]
-function Allure:Container<A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S>(
-	A: A?, B: B?, C: C?, D: D?, E: E?, 
-	F: F?, G: G?, H: H?, I: I?, J:J?, 
-	K: K?, L: L?, M: M?, N: N?, O: O?, 
-	P: P?, Q: Q?, R: R?, S: S?
-) --: <V>(V & table) -> (UnregisteredContainer<{}, V>, P...)
-	local containers = {A, B, C, D, E, F, G, H, I, J, K, L, M, M, O, P, Q, R, S}
+function Allure:Node<A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S>(
+	A: A?,
+	B: B?,
+	C: C?,
+	D: D?,
+	E: E?,
+	F: F?,
+	G: G?,
+	H: H?,
+	I: I?,
+	J: J?,
+	K: K?,
+	L: L?,
+	M: M?,
+	N: N?,
+	O: O?,
+	P: P?,
+	Q: Q?,
+	R: R?,
+	S: S?
+) --: <V>(V & table) -> (UnregisteredNode<{}, V>, P...)
+	local Nodes = { A, B, C, D, E, F, G, H, I, J, K, L, M, M, O, P, Q, R, S }
 
 	return function<T>(content: T)
 		(content :: any).__index = content --for classes, this remains the table unsealed
 
-		return function<V>(meta: V & table) --: (UnregisteredContainer<{}, V>, P...)
+		return function<V>(meta: V & table) --: (UnregisteredNode<{}, V>, P...)
 			(content :: any).___meta = meta --this remains the table unsealed
 
-			local container = setmetatable( --: UnregisteredContainer<{}, V>
+			local Node = setmetatable( --: UnregisteredNode<{}, V>
 				content,
 				{
-					__containerref = content,
-					__containermeta = lowmerge(meta, { --modifies meta
-						Dependencies = containers,
+					__Noderef = content,
+					__Nodemeta = lowmerge(meta, { --modifies meta
+						Dependencies = Nodes,
 					}) :: V,
 					__call = function()
 						return content
@@ -203,60 +293,171 @@ function Allure:Container<A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, 
 							lowmerge(meta, override)
 							return self
 						end,
-					}, {__index = meta}), --third layer __index to reference metadata
+						GetDependencyCount = function<S>(self: S): number
+							return depcount(meta.Dependencies)
+						end,
+					}, { __index = meta }), --third layer __index to reference metadata
 				}
 			)
 
-			return container, A :: A, B :: B, C :: C, D :: D, E :: E, 
-				F :: F, G :: G, H :: H, I :: I, J :: J, K :: K, L :: L, 
-				M :: M, N :: N, O :: O, P :: P, Q :: Q, R :: R, S :: S --table.unpack(containers)
+			return Node,
+				A :: A,
+				B :: B,
+				C :: C,
+				D :: D,
+				E :: E,
+				F :: F,
+				G :: G,
+				H :: H,
+				I :: I,
+				J :: J,
+				K :: K,
+				L :: L,
+				M :: M,
+				N :: N,
+				O :: O,
+				P :: P,
+				Q :: Q,
+				R :: R,
+				S :: S --table.unpack(Nodes)
 		end
 	end
 end
 
+--- moonwave docs cannot handle more than 3 lines of text to render @param and @return
+
 --[[
-    Registers an unregistered container.
-    <br>A registered container has immutable metadata, which is merged with the singleton, and can be used as a dependency.
+    Registers an unregistered Node's dependency tree node
+	<br> Returns the Node merged with readonly immutable metadata
 
     ---
-    @param `container`      `(Unregisteredcontainer)` &emsp; = &emsp; *The unregistered container*
+    @param Node      `(UnregisteredNode)` &emsp; = &emsp; *The unregistered Node*
 
-    @return `Container<T>`      &emsp; = &emsp; *Registered container*
+    @return `Node<T>`      &emsp; = &emsp; *Node*
 ]]
-function Allure:Register<T, V, R>(
-	container --& { __index: T, ___meta: V & { Descriptions: table? } }
-) --: MetatableLess<T> --Container<T>
+function Allure:Register(Node)
+	local instance = (Node :: any).___meta.Instance
 
-	--type sealedContainer = typeof(sealTable(container))
+	local childrenNodes = {}
+	for _, inst in instance:GetChildren() do
+		childrenNodes[inst] = Allure:Node(inst)
+	end
 
-	--local containermt = getmetatable(sealTable(container))
-	--containermt = containermt :: typeof(containermt)
-
-	--type a = getmetatable<setmetatable<{}, {a: number}>>
-
-	--type returnType = typeof(containermt.__containerref)--typeof(setmetatable({} :: sealedContainer, nil)) --metabasis<sealedContainer>
-
-	--typesolver fails at passing argument setmetatable<>s with a base of generic T
-	--so I have to retype T and V onto the metatable of `container` with correct types of references
-	local containermt = getmetatable(container :: T) :: V & {__containerref: T & table & {Descriptions: table?}, __containermeta: V & table} & getmetatable<UnregisteredContainer<{}, V>>
-
-	return lowmerge(
+	local registered = lowmerge(
 		lowmerge(
-			--lowmerge({}, container :: T), --1. reference singleton
-			container,
+			--lowmerge({}, Node :: T), --1. reference singleton
+			Node,
 			{
 				Name = script.Name, --2. default metadata
 				Version = "1.0.0",
 				Description = "",
+				Author = "",
+				License = "",
 
 				Dependencies = {},
-				Priority = -depcount(containermt.__containermeta.Descriptions or {} :: table), --counts nested dependencies
+				Priority = -depcount((Node :: any).___meta.Dependencies or {} :: table), --counts nested dependencies
 
 				Client = true,
+
+				Tags = {},
+				Nodes = childrenNodes,
+
+				Instance = instance,
 			} :: never
 		),
-		containermt.__containermeta :: Container
-	) --3. given metadata
+		table.freeze((Node :: any).___meta) :: Node --3. given metadata
+	)
+
+	RegisteredNodes[instance] = registered
+
+	return registered
+end
+
+--[[
+    Registers an unregistered Node.
+    <br>A registered Node has immutable metadata, which is merged with the singleton, and can be used as a dependency.
+
+    ---
+    @param `Node`      `(UnregisteredNode)` &emsp; = &emsp; *The unregistered Node*
+
+    @return `Node<T>`      &emsp; = &emsp; *Registered Node*
+]]
+function Allure:NodeTree(parent: Instance): NodeTree
+	local NodeTree: NodeTree
+
+	NodeTree = {
+		Parent = parent,
+		Tree = {},
+
+		GetModuleNodes = function(self: NodeTree)
+			local nodes = {}
+			for instance, node in self.Tree do
+				if node.Instance:IsA "ModuleScript" then
+					nodes[instance] = node
+				end
+			end
+			return nodes
+		end,
+
+		GetFolderNodes = function(self: NodeTree)
+			local nodes = {}
+			for instance, node in self.Tree do
+				if node.Instance:IsA "Folder" then
+					nodes[instance] = node
+				end
+			end
+			return nodes
+		end,
+
+		ForEach = function(self: NodeTree, fn: (self: NodeTree, node: Node) -> ...any?)
+			for inst, node in self.Tree do
+				fn(self, node)
+			end
+			return self
+		end,
+
+		ForAll = function(self: NodeTree, fn: (self: NodeTree, nodes: { [Instance]: Node }) -> ...any?)
+			fn(self, self.Tree)
+			return self
+		end,
+
+		ForEachTagged = function(self: NodeTree, tag: any, fn: (self: NodeTree, nodes: Node) -> ...any?)
+			for inst, node in self.Tree do
+				if node.Tags[tag] then
+					fn(self, node)
+				end
+			end
+			return self
+		end,
+
+		ForAllTagged = function(self: NodeTree, tag: any, fn: (self: NodeTree, nodes: { [Instance]: Node }) -> ...any?)
+			local tagged = {}
+			for inst, node in self.Tree do
+				tagged[inst] = node.Tags[tag] and node or nil
+			end
+
+			fn(self, tagged)
+			return self
+		end,
+
+		Sort = nil :: any,
+
+		LoadChildren = nil :: any,
+		LoadFromTree = nil :: any,
+
+		Merge = nil :: any,
+
+		SliceNonModules = nil :: any,
+		SliceNonFolders = nil :: any,
+
+		SliceNode = nil :: any,
+
+		SlicePredicate = nil :: any,
+		SliceTagged = nil :: any,
+		SliceFromChild = nil :: any,
+	}
+
+	return NodeTree
 end
 
 return Allure
