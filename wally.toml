@@ -1,8 +1,8 @@
 [package]
-name = "mat/alloy"
-description = "description"
+name = "r-iva9/allure"
+description = "Node Actor Framework for Luau"
 license = "MIT"
-authors = ["m-at1"]
+authors = ["r-iva9"]
 version = "0.1.0"
 
 registry = "https://github.com/UpliftGames/wally-index"
