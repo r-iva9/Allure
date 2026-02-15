@@ -3,18 +3,9 @@
 --!native
 
 --[[
-    ALLURE: ACTOR NODE FRAMEWORK
+    ALLURE: NODE WORKER FRAMEWORK
     By r_iva9
-
-    API
-
-    Types
-
-    ...
-
-    Functions
-
-    ...
+	Open source (MIT)
 ]]
 
 ------------
@@ -32,6 +23,35 @@ local CONFIG = {
 type table = { [any]: any }
 
 --[=[
+    Custom thread object for Worker Nodes.
+	<br>Encapsulates a thread and a queue for task consumption
+]=]
+export type Thread = {
+	--- Returns a function identical to `fn` but with a wrapper that enqueues it
+	Function: <A..., R...>(self: Thread, fn: (A...) -> R...) -> (A...) -> (),
+
+	--- Safely enqueue a function
+	Enqueue: <A..., R...>(self: Thread, fn: (A...) -> R...) -> Thread,
+
+	--- Task (function) queue for coroutine consumption
+	Queue: { (...any?) -> ...any? },
+
+	--- Array of functions, all of which are called once any item is __dequeued__
+	--- <br>The functions are called on the consumer thread!
+	QueueHook: { (...any?) -> ...any? },
+
+	--- Yields the thread for `sec` seconds without throttling and sets a flag
+	--- <br>Threads yielded via `task.wait` or `coroutine.yield` will consume next tasks immediately
+	Yield: (self: Thread, sec: number) -> number,
+
+	--- The underlying coroutine thread of this Thread
+	Coroutine: thread,
+
+	--- Closes the coroutine, destroys the queue and Thread
+	Kill: (self: Thread) -> (),
+}
+
+--[=[
     This is the type of Node workspaces.
 	<br>However as the tables have to remain unsealed this is not used and can only assist in custom type checking.
 ]=]
@@ -44,7 +64,10 @@ export type NodeWorkspace<T, V> = setmetatable<
 			UseDependency: <S, M>(self: S, singleton: M) -> M,
 			SetPriority: <S>(self: S, priority: number) -> S,
 			ModifyMeta: <S>(self: S, override: table) -> S,
+			Meta: V,
+			Threads: <S>(self: S, amount: number) -> ...Thread,
 			GetDependencyCount: <S>(self: S) -> number,
+			Zero: () -> Node,
 		}, { __index: V }>,
 	}
 >
@@ -69,8 +92,8 @@ export type Node = {
 }
 
 --[=[
-    The type of each and any dependency tree
-	<br>Node tree nodes have the Node type
+    NodeTree: A tree of loaded nodes with branches of dependencies
+	<br>Allows to tag nodes, slice and divide trees, sort nodes, call functions for nodes, etc.
 ]=]
 export type NodeTree = {
 	Tree: { Node },
@@ -140,11 +163,11 @@ export type NodeTree = {
 -- UTILITY
 
 --[[
-    Utility table merger.
-    <br>Takes 2 tables, modifies and returns the first one
+	Utility table merger.
+	<br>Takes 2 tables, modifies and returns the first one
 
-    Does not perform cloning or deepcloning
-    <br>This becomes suitable for dependencies hence the singletons
+	Does not perform cloning or deepcloning
+	<br>This becomes suitable for dependencies hence the singletons
 ]]
 function lowmerge<T, V>(t0: T, t1: V): T & V
 	for k, v in t1 :: table do
@@ -214,8 +237,8 @@ end
 	---
 
 	@param ... &emsp; `(tables)` &emsp; = &emsp; *1st function: dependency singletons (nodes)*
-	@param -> content &emsp; `(table)` &emsp; = &emsp; *2nd function: the content table. This table remains unsealed*
-	@param -> -> meta &emsp; `(table)` &emsp; = &emsp; *3rd third function: the initial metadata. It remains mutable*
+	@param -> content &emsp; `(table)` &emsp; = &emsp; *2nd function: the content table. It remains unsealed*
+	@param -> -> meta &emsp; `(table)` &emsp; = &emsp; *3rd function: the initial metadata. It remains mutable*
 	@return `NodeWorkspace<typeof(content), V>`      &emsp; = &emsp; *A workspace for Node creation with utilities*
 ]=]
 function Allure:NodeWorkspace<A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S>(
@@ -238,7 +261,7 @@ function Allure:NodeWorkspace<A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q,
 	Q: Q?,
 	R: R?,
 	S: S?
-) --: <V>(V & table) -> (UnregisteredNode<{}, V>, P...)
+)
 	local Nodes = { A, B, C, D, E, F, G, H, I, J, K, L, M, M, O, P, Q, R, S }
 
 	return function<T>(content: T)
@@ -250,7 +273,7 @@ function Allure:NodeWorkspace<A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q,
 
 		(content :: any).__index = content --for classes, this remains the table unsealed
 
-		return function<V>(meta: V & table) --: (UnregisteredNode<{}, V>, P...)
+		return function<V>(meta: V & table)
 			(content :: any).___meta = meta --this remains the table unsealed
 
 			Log.ErrorAssert(
@@ -259,25 +282,121 @@ function Allure:NodeWorkspace<A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q,
 				Log.Format("BadType", "Metadata", "Allure:NodeWorkspace()()(HERE)", typeof(meta), "table")
 			)
 
-			local Node = setmetatable( --: UnregisteredNode<{}, V>
-				content,
-				{
-					__Noderef = content,
-					__Nodemeta = lowmerge(meta, { --modifies meta
-						Dependencies = Nodes,
-					}) :: V,
-					__call = function()
+			local Node = setmetatable(content, {
+				__Noderef = content,
+				__Nodemeta = lowmerge(meta, { --modifies meta
+					Dependencies = Nodes,
+				}) :: V,
+				__call = function()
+					return lowmerge(
+						lowmerge(
+							setmetatable(content, nil) :: T, --1. reference singleton
+							{
+								Name = "", --2. default metadata
+								Version = "1.0.0",
+								Description = "",
+								Author = "",
+								License = "",
+
+								Dependencies = {},
+
+								Tags = {
+									Priority = -depcount(meta.Dependencies or {} :: table), --counts nested dependencies
+								},
+							} :: never
+						),
+						meta :: Node --3. given metadata
+					)
+				end,
+				__index = setmetatable({
+					UseDependency = function<S, M>(self: S, singleton: M): M
+						meta.Dependencies[#meta.Dependencies + 1] = singleton
+						return singleton
+					end,
+					SetPriority = function<S>(self: S, priority: number): S
+						meta.Priority = priority
+						return self
+					end,
+					ModifyMeta = function<S>(self: S, override: table): S
+						lowmerge(meta, override)
+						return self
+					end,
+					Meta = meta,
+					GetDependencyCount = function<S>(self: S): number
+						return depcount(meta.Dependencies)
+					end,
+					Threads = function<S>(self: S, amount: number): ...Thread
+						local threads: { Thread } = {}
+						for i = 1, amount do
+							-- create coroutine
+							local Lifecycle = true
+							local YieldFlag = false
+
+							--coroutine 1: consumer
+							local thread = coroutine.create(function(self: Thread)
+								while Lifecycle do
+									if not self.Queue[1] then
+										coroutine.yield()
+									end
+
+									self.Queue[1]()
+
+									table.remove(self.Queue, 1)
+									for _, fn in self.QueueHook do
+										fn(self)
+									end
+								end
+							end)
+
+							--create Thread
+							threads[i] = {
+								Function = function<A..., R...>(self: Thread, fn: (A...) -> R...): (A...) -> ()
+									return function(...)
+										local pack = { ... }
+										self:Enqueue(function()
+											fn(table.unpack(pack))
+										end)
+									end
+								end,
+								Enqueue = function(self: Thread, fn: (...any?) -> ...any?)
+									table.insert(self.Queue, fn)
+
+									if coroutine.status(thread) == "suspended" and not YieldFlag then
+										coroutine.resume(thread, self)
+									end
+
+									return self
+								end,
+
+								Queue = {},
+								QueueHook = {},
+
+								Yield = function(self: Thread, sec: number)
+									YieldFlag = true
+									local t = task.wait(sec)
+									YieldFlag = false
+									return t
+								end,
+
+								Coroutine = thread,
+								Kill = function(self: Thread)
+									Lifecycle = false
+									coroutine.close(self.Coroutine)
+									table.clear(self)
+									self = nil :: never
+								end,
+							}
+
+							coroutine.resume(thread, threads[i])
+						end
+
+						return table.unpack(threads)
+					end,
+					Zero = function()
 						return lowmerge(
 							lowmerge(
-								--lowmerge({}, Node :: T),
-								setmetatable(content, nil) :: T, --1. reference singleton
-								{
-									Name = "", --2. default metadata
-									Version = "1.0.0",
-									Description = "",
-									Author = "",
-									License = "",
-
+								setmetatable(content, nil), --1. reference singleton
+								{ --2. default metadata
 									Dependencies = {},
 
 									Tags = {
@@ -288,41 +407,8 @@ function Allure:NodeWorkspace<A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q,
 							meta :: Node --3. given metadata
 						)
 					end,
-					__index = setmetatable({
-						UseDependency = function<S, M>(self: S, singleton: M): M
-							meta.Dependencies[#meta.Dependencies + 1] = singleton
-							return singleton
-						end,
-						SetPriority = function<S>(self: S, priority: number): S
-							meta.Priority = priority
-							return self
-						end,
-						ModifyMeta = function<S>(self: S, override: table): S
-							lowmerge(meta, override)
-							return self
-						end,
-						Meta = meta,
-						GetDependencyCount = function<S>(self: S): number
-							return depcount(meta.Dependencies)
-						end,
-						Zero = function()
-							return lowmerge(
-								lowmerge(
-									setmetatable(content, nil), --1. reference singleton
-									{ --2. default metadata
-										Dependencies = {},
-
-										Tags = {
-											Priority = -depcount(meta.Dependencies or {} :: table), --counts nested dependencies
-										},
-									} :: never
-								),
-								meta :: Node --3. given metadata
-							)
-						end,
-					}, { __index = meta }), --third layer __index to reference metadata
-				}
-			)
+				}, { __index = meta }), --third layer __index to reference metadata
+			})
 
 			return Node,
 				A :: A,
@@ -343,7 +429,7 @@ function Allure:NodeWorkspace<A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q,
 				P :: P,
 				Q :: Q,
 				R :: R,
-				S :: S --table.unpack(Nodes)
+				S :: S
 		end
 	end
 end
@@ -356,8 +442,8 @@ end
 	---
 
 	@param ... &emsp; `(tables)` &emsp; = &emsp; *1st function: dependency tables via require()*
-	@param -> content &emsp; `(table)` &emsp; = &emsp; *3rd function: the content table*
-	@param -> -> meta &emsp; `(table)` &emsp; = &emsp; *2nd function: the metadata table*
+	@param -> content &emsp; `(table)` &emsp; = &emsp; *2nd function: the content table*
+	@param -> -> meta &emsp; `(table)` &emsp; = &emsp; *3rd function: the metadata table*
 	@return `Node & typeof(content)`      &emsp; = &emsp; *Node*
 ]=]
 function Allure:Node<P...>(...: P...)
@@ -400,14 +486,16 @@ function Allure:Node<P...>(...: P...)
 end
 
 --[=[
-    Creates a Node.
+    Creates a Node with the minimum required metadata overhead.
+	
+	Nodes are modular architectural units with content and metadata.
 
 	---
 
-	@param ... test --test2
-	@param content test --test2
-	@param -> -> meta &emsp; `(table)` &emsp; = &emsp; *For the third function, pass the initial metadata. It is mutable before registration*
-	@return `Node & T`      &emsp; = &emsp; *A workspace for Node creation with utilities*
+	@param ... &emsp; `(tables)` &emsp; = &emsp; *1st function: dependency tables via require()*
+	@param -> content &emsp; `(table)` &emsp; = &emsp; *2nd function: the content table*
+	@param -> -> meta &emsp; `(table)` &emsp; = &emsp; *3rd function: the metadata table*
+	@return `Node & typeof(content)`      &emsp; = &emsp; *Node*
 ]=]
 function Allure:ZeroNode<P...>(...: P...)
 	local dependencies = { ... }
@@ -647,7 +735,7 @@ end
 return Allure:Node()(Allure) {
 	Name = "Allure",
 	Version = "0.1.0",
-	Description = "Actor Node Framework",
+	Description = "Node Worker Framework",
 	Author = "r_iva9",
 	License = "MIT",
 }
