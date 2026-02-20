@@ -4,7 +4,8 @@
 
 --[[
     ALLURE: NODE WORKER FRAMEWORK
-    By r_iva9
+    By r-iva9
+	1.0.0
 	Open source (MIT)
 ]]
 
@@ -734,7 +735,7 @@ end
 -- Allure is created via allure
 return Allure:Node()(Allure) {
 	Name = "Allure",
-	Version = "0.1.0",
+	Version = "1.0.0",
 	Description = "Node Worker Framework",
 	Author = "r_iva9",
 	License = "MIT",
