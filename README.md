@@ -18,6 +18,8 @@
 > [!IMPORTANT]
 > <h2>Allure is incredibly fresh and new</h2>
 > This means that Allure has some unfinished features, documentation, unremoved bloat, and possibly some overlooked issues.
+>
+> ***Additionally, Allure is not a small project and will be tied to an already progressively worked on ecosystem.***
 
 ## 📦 Installation
 Install via wally:
@@ -28,7 +30,7 @@ Allure = "r-iva9/allure@1.0.0"
 
 # 🍃 Nodes and Boilerplate
 
-## 💠 A Node
+### 💠 A Node
 ***Is a modulescript singleton in your game.***
 <br>Nodes have metadata: their own name, version, description.
 
@@ -69,7 +71,7 @@ local dep2 = module:UseDependency(require(path.to.dep2))
 -- Turn the workspace into a node by calling it like a function:
 return module()
 ```
-This workspace already does some necessities for you, like setting `__index` of `module` to `module`.
+This workspace already does some necessities for you, like setting `__index` inside of `module` to `module`.
 > ### Multithreading in Nodes
 
 Node workspaces allow you to inject Threads into the Node, enqueue functions, attach hooks, clear the queue, and more.
