@@ -10,8 +10,8 @@
 <h1></h1>
 </br>
 <div align="center">
-  <a href="https://github.com/m-at1/Allure/blob/main/Installation.md"><img width="65" height="50" src="./images/Install.png" alt="Install"></a>‎‎‎‎‎‎‎‎ㅤ‎‎‎‎‎‎‎‎ㅤ‎‎‎‎‎‎‎‎ㅤ‎‎‎‎‎‎‎‎ㅤ‎‎‎‎‎‎‎‎ㅤ‎‎‎‎‎‎‎‎ㅤ‎‎‎‎‎‎‎‎ㅤ‎‎‎‎‎‎‎‎ㅤ
-  <a href="https://github.com/m-at1/Allure/releases"><img width="160" height="50" src="./images/Docs.png" alt="Docs"></a> <!--ㅤ‎‎‎‎‎‎‎‎ㅤ‎‎‎‎‎‎‎‎ㅤ‎‎‎‎‎‎‎‎ㅤ‎‎‎‎‎‎‎‎ㅤ‎‎‎‎‎‎‎‎ㅤ‎‎‎‎‎‎‎‎ㅤ‎‎‎‎‎‎‎‎ㅤ
+  <a href="https://r-iva9.github.io/Allure/course/introduction/gettingstarted.html"><img width="65" height="50" src="./images/Install.png" alt="Install"></a>‎‎‎‎‎‎‎‎ㅤ‎‎‎‎‎‎‎‎ㅤ‎‎‎‎‎‎‎‎ㅤ‎‎‎‎‎‎‎‎ㅤ‎‎‎‎‎‎‎‎ㅤ‎‎‎‎‎‎‎‎ㅤ‎‎‎‎‎‎‎‎ㅤ‎‎‎‎‎‎‎‎ㅤ
+  <a href="https://r-iva9.github.io/Allure/"><img width="160" height="50" src="./images/Docs.png" alt="Docs"></a> <!--ㅤ‎‎‎‎‎‎‎‎ㅤ‎‎‎‎‎‎‎‎ㅤ‎‎‎‎‎‎‎‎ㅤ‎‎‎‎‎‎‎‎ㅤ‎‎‎‎‎‎‎‎ㅤ‎‎‎‎‎‎‎‎ㅤ‎‎‎‎‎‎‎‎ㅤ
   a href="https://github.com/m-at1/Alloy/releases"><img width="130" height="50" src="./images/Benchmarks.png" alt="Benchmarks"></a> -->
 </div>
 
@@ -19,7 +19,7 @@
 > <h2>Allure is incredibly fresh and new</h2>
 > This means that Allure has some unfinished features, documentation, unremoved bloat, and possibly some overlooked issues.
 >
-> ***Additionally, Allure is not a small project and will be tied to an already progressively worked on ecosystem.***
+> ***Allure has a long way to go and will be tied to the Allure Ecosystem. There be dragons.***
 
 ## 📦 Installation
 Install via wally:
@@ -38,8 +38,9 @@ Nodes can
   - rely on threads,
   - be used as dependencies for other nodes,
   - be used in dependency trees
+  - tagged
   - and more!
-> ### Minimum boilerplate
+### Minimum boilerplate
 ```luau
 local Allure = require(path.to.Allure)
 
@@ -47,7 +48,7 @@ local module = {}
 
 return Allure:Node()(module) {}
 ```
-> ### Injecting dependencies
+### Injecting dependencies
 ```luau
 local Allure = require(path.to.Allure)
 
@@ -72,7 +73,7 @@ local dep2 = module:UseDependency(require(path.to.dep2))
 return module()
 ```
 This workspace already does some necessities for you, like setting `__index` inside of `module` to `module`.
-> ### Multithreading in Nodes
+### Multithreading in Nodes
 
 Node workspaces allow you to inject Threads into the Node, enqueue functions, attach hooks, clear the queue, and more.
 ```luau
@@ -99,20 +100,20 @@ end)
 return module()
 ```
 
-# 📜 Dependency Trees and Loading
-***Allure allows you to create, divide, slice, merge and order Dependency Trees***
+# 📜 NodeTrees and Loading
+***Allure allows you to create, divide, slice, merge and order Node Trees***
 
-Think of dependency trees as instances of loaders:
-- You can have a dependency tree for services,
+Think of Node Trees as instances of loaders:
+- You can have a node tree for services,
 - an another for Packages,
 - and an another for Controllers
 
-The point is, you can apply ***different lifecycle hooks*** on different dependency trees, call different functions, order differently, and more!
-> ### Basic loader methods
+The point is, you can apply ***different lifecycle hooks*** on different node trees, call different functions, order differently, and more!
+### Basic loader methods
 ```luau
 local Allure = require(path.to.Allure)
 
-local tree = Allure:DependencyTree()
+local tree = Allure:NodeTree()
 
 -- Children singletons of these folders are loaded as surface-level nodes of the tree
 -- Additionally, the nodes get tagged with Instance = their modulescript
@@ -124,13 +125,14 @@ tree:ForEach(function(node)
 end)
 ```
 Since you can have multiple trees, the point of singletons still stands:
-<br>***A modulescript node, existing in multiple dependency trees, will share all of it's contents, including metadata and <ins>tags</ins>***
+<br>***A modulescript node, existing in multiple node trees, will share all of it's contents, including metadata and <ins>tags</ins>***
 
-> ### Slicing dependency trees
+### Slicing NodeTrees
 ```luau
 local Allure = require(path.to.Allure)
 
-local maintree = Allure:DependencyTree():LoadChildren(script.Services)
+local maintree = Allure:NodeTree()
+  :LoadChildren(script.Services)
 
 -- Let's tag each node by how many dependencies it has
 maintree:ForEach(function(node)
@@ -147,9 +149,9 @@ end)
 -- This means exactly what you are thinking of, we can use all the
 -- same loader methods on it, too:
 depTree:ForEach(function(node)
-  --...
+  node:OnInit()
 end, function(node, err)
-  warn("An error", tostring(err), "has occured in", node.Tags.Instance.Name)
+  warn("An error has occured in", node.Tags.Instance.Name)
 end)
 --^^ Additionally, you can list a second function for the :ForEach call
 -- to act as an Error Handler!
@@ -158,3 +160,7 @@ end)
 ## License
 Allure is shared and released with the MIT License.
 </br>Give me a shoutout if you want!
+
+<p align="center">
+  <img width="170" height="150" src="https://github.com/m-at1/Allure/blob/main/images/shortlogo.png?raw=true" alt="Logo">
+</p>
