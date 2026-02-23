@@ -2,8 +2,10 @@ export default {
   base: '/Allure/',
   title: "Allure",
   // titleTemplate: ":title ...",
-  description: "Reactive Framework of Frameworks for the Roblox Metaverse.",
-  head: [["link", { rel: "icon", href: "/biglogo.svg" }]],
+  description: "Fully Typesafe Node & Worker Framework for Luau",
+  head: [
+    ["link", { rel: "icon", type: 'image/svg+xml', href: "/Allure/shortlogo.svg" }]
+  ],
 
   themeConfig: {
       logo: "/biglogo.svg",
@@ -20,7 +22,7 @@ export default {
       nav: [
           { text: "Home", link: "/" },
           { text: "Documentation", link: "/course/introduction/intro" },
-          //{ text: "API", link: "/api/reactivity-core"},
+          { text: "API", link: "/api/types" },
       ],
 
       sidebar: {
@@ -28,7 +30,9 @@ export default {
               {
                   text: "API",
                   items: [
-                      // { text: "name", link: "/api/reactivity-core" },
+                      { text: "Types", link: "/api/types" },
+                      { text: "Functions", link: "/api/functions" },
+                      { text: "Errors", link: "/api/errors" },
                   ]
               }
           ],
@@ -42,50 +46,37 @@ export default {
                   ]
               },
               {
-                  text: "AllureUI",
+                  text: "Allure",
                   items: [
-                    { text: "Garbage", link: "/course/AllureUI/garbage" },
-                    {
-                        text: "States",
+                      { text: "Nodes", link: "/course/allure/node" },
+                      {
+                        text: "Workspaces",
                         items: [
-                            { text: "State", link: "/course/AllureUI/States/State" },
-                            { text: "Setter and Getter", link: "/course/AllureUI/States/SetGet" },
-                            { text: "Updater and Deleter", link: "/course/AllureUI/States/UpdateDelete" },
-                            { text: "Custom attributes", link: "/course/AllureUI/States/Custom" },
+                            { text: "NodeWorkspace", link: "/course/allure/nodework" },
+                            { text: "Multi-threading", link: "/course/allure/multithread" },
                         ]
                     },
                     {
-                        text: "Amplified Tables",
+                        text: "Trees",
                         items: [
-                            { text: "Amplified Table", link: "/course/AllureUI/Amplifieds/Amplified" },
-                            { text: "State Keys", link: "/course/AllureUI/Amplifieds/StateKeys" },
-                            { text: "Unique Values", link: "/course/AllureUI/Amplifieds/UniqueValues" },
-                            { text: "Setter and Getter", link: "/course/AllureUI/Amplifieds/SetGet" },
+                            { text: "NodeTree", link: "/course/allure/nodetree" },
+                            { text: "Multiple Trees", link: "/course/allure/nodetrees" },
                         ]
                     },
                     {
-                        text: "Mounting",
+                        text: "Best Practices",
                         items: [
-                            { text: "Mounting", link: "/course/AllureUI/Mounting/Mount" },
-                            { text: "Children", link: "/course/AllureUI/Mounting/UniqueValues" },
-                            { text: "Events", link: "/course/AllureUI/Mounting/Events" },
+                            { text: "Master-Worker", link: "/course/allure/masterworker" },
+                            { text: "Message Bus", link: "/course/allure/messagebus" },
                         ]
-                    }
+                    },
                   ]
               },
-              {
-                  text: "AllureBundle",
-                  items: [
-                    { text: ":New", link: "/course/AllureBundle/New" },
-                    { text: "Computed", link: "/course/AllureBundle/Computed" },
-                    { text: "Effect", link: "/course/AllureBundle/Effect" },
-                  ]
-              }
           ],
       },
 
       socialLinks: [
-          { icon: "github", link: "https://github.com/m-at1/Allure" }
+          { icon: "github", link: "https://github.com/r-iva9/Allure" }
       ]
   }
 }

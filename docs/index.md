@@ -5,7 +5,7 @@ layout: home
 hero:
   name: "Allure"
   text: ""
-  tagline: "Reactive Framework of Frameworks for the Roblox Metaverse."
+  tagline: "Fully Typesafe Node & Worker Framework for Luau"
   image:
     src: /biglogo.svg
     alt: Allure logo
@@ -14,17 +14,17 @@ hero:
       text: Get Started
       link: /course/introduction/intro
     - theme: alt
-      text: Examples
-      link: /course/introduction/intro
+      text: API
+      link: /api/types
 
 features:
-  - title: Componentized
-    icon: 🧩
-    details: Allure interconnects multiple frameworks, any of which can be removed.
-  - title: Powerful
-    icon: 💥
-    details: Allure provides a low level customizable API, extensible for any purpose.
-  - title: Fullstack
-    icon: 💠
-    details: Allure's features focus on reusability and extension suitable for both, client and server.
+  - title: Lightweight
+    icon: 🪶
+    details: Allure is very easy to learn and use, being just a single module under 20 KB.
+  - title: Extensible
+    icon: 📦
+    details: Allure provides a container and lots of tools for your modular game architecture. Allure itself is a node!
+  - title: Actively maintained
+    icon: ⚒️
+    details: Allure will not stop here; you will be able to witness, or even contribute to an entire ecosystem of modules to fully supply fullstack game development with Allure.
 ---

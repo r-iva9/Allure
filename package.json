@@ -1,7 +1,7 @@
 {
   "name": "allure",
   "version": "1.0.0",
-  "description": "<p align=\"center\">\r   <img width=\"500\" height=\"250\" src=\"https://github.com/m-at1/Allure/blob/main/images/logo.png?raw=true\" alt=\"Logo\">\r </p>",
+  "description": "Fully Typesafe Node & Worker Framework for Luau",
   "main": "index.js",
   "directories": {
     "doc": "docs"
@@ -14,16 +14,16 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/m-at1/Allure.git"
+    "url": "git+https://github.com/r-iva9/Allure.git"
   },
   "keywords": [],
-  "author": "",
+  "author": "r-iva9",
   "license": "MIT",
   "type": "commonjs",
   "bugs": {
-    "url": "https://github.com/m-at1/Allure/issues"
+    "url": "https://github.com/r-iva9/Allure/issues"
   },
-  "homepage": "https://github.com/m-at1/Allure#readme",
+  "homepage": "https://github.com/r-iva9/Allure#readme",
   "devDependencies": {
     "vitepress": "^1.6.4"
   }

@@ -315,7 +315,7 @@ function Allure:NodeWorkspace<A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q,
 						return singleton
 					end,
 					SetPriority = function<S>(self: S, priority: number): S
-						meta.Priority = priority
+						meta.Tags.Priority = priority
 						return self
 					end,
 					ModifyMeta = function<S>(self: S, override: table): S

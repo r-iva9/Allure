@@ -8,17 +8,13 @@ Caught your attention? Welcome to the tutorial section.
 > Add the following to your wally.init:
 
 > ```luau
-> Allure = m-at1/Allure@latest
+> Allure = "r-iva9/allure@1.0.0"
 > ```
+(The wally package description is misleading, sorry for that!)
 
-### Roblox Studio
+### From source
 > Directly download the latest version and place it in your replicated storage.
 
-## Expectations
-These tutorials firstly give you a straightforward and simple representation of the feature.<br>
-Then, the low-level guides go.
-
-So these tutorials assume, that
-> - You have at the least some knowledge of Luau.
-> - You're familiar with garbage collection, state machinery and hooks. 
->    * A lot of this is not going to be explained in depth, especially in AllureUI.
+## Guides
+You are not expected to know anything significant or extraordinary.
+<br>Standard Luau knowledge will do.
