@@ -3,24 +3,29 @@
 --!native
 
 --[[
-    ALLURE: TYPESAFE NODE & WORKER FRAMEWORK
+    ALLURE: TYPESAFE DI & IoC NODE & WORKER FRAMEWORK and CORE OF ALLURE ECOSYSTEM
     By r-iva9
 	1.1.0
 	Open source (MIT)
+	https://github.com/r-iva9/Allure
 ]]
 
 ------------
 -- CONFIG
 
 local CONFIG = {
-	-- Warn or error upon finding an unusual type during creation of nodes
+	-- Warn or error upon finding an unusual type in the usage of nodes
 	WarnUnusualNodeTypes = true,
 
 	-- Warn or error upon finding an unusual type when using workers
 	WarnWorkerTypes = true,
 
-	-- Default yieldthreshold for `tree:ForEach` calls
-	DEFAULT_YIELD_THRESHOLD = 999,
+	-- Warn upon detecting unusual behavior, like slicing an empty tree or injecting a non-node dependency
+	-- Technically this is the debug mode
+	WarnBehavioralErrors = true,
+
+	-- Default yieldthreshold in seconds for `tree:ForEach` calls
+	DEFAULT_YIELD_THRESHOLD = 120,
 }
 
 ------------
@@ -38,7 +43,7 @@ export type Worker = {
 	Function: <A..., R...>(self: Worker, fn: (A...) -> R...) -> (A...) -> (),
 
 	--- Safely enqueue a function
-	Enqueue: <A..., R...>(self: Worker, fn: (A...) -> R...) -> Worker,
+	Enqueue: <A..., R...>(self: Worker, fn: (A...) -> R..., A...) -> Worker,
 
 	--- Dequeues and returns the task under `index` in the Queue, or the last task, if not specified
 	Dequeue: <A..., R...>(self: Worker, index: number?) -> (A...) -> R...,
@@ -160,16 +165,16 @@ export type NodeTree = {
 
 	---// Slicers //
 
-	--- Creates a **new** dependency tree by slicing the existing tree nodes having which the function returns false
+	--- **Changes** the dependency tree by slicing the existing tree nodes having which the function returns false
 	SlicePredicate: (self: NodeTree, predicate: (self: NodeTree, Node: Node) -> boolean) -> NodeTree,
 
-	--- Creates a **new** dependency tree by slicing the specified node
+	--- **Changes** the dependency tree by slicing the specified node
 	SliceNode: (self: NodeTree, Node: Node) -> NodeTree,
 
-	--- Creates a **new** dependency tree by slicing node descendants of a specific instance
+	--- **Changes** the dependency tree by slicing node descendants of a specific instance
 	SliceFromChild: (self: NodeTree, child: Instance) -> NodeTree,
 
-	--- Creates a **new** dependency tree by slicing the existing tree nodes with a specific tag *present* and/or with a *specific type* and/or with a *specific value*
+	--- **Changes** the dependency tree by slicing the existing tree nodes with a specific tag *present* and/or with a *specific type* and/or with a *specific value*
 	SliceTagged: (self: NodeTree, tag: any, valueType: string?, value: any?) -> NodeTree,
 }
 
@@ -246,16 +251,14 @@ local LogTemplates = {
 }
 local Log = {
 	Warn = function(...)
-		local stack =
-			debug.traceback("\n\n\t\t---------\t--------- \t\t\tStack Traceback\t\t\t ---------\t---------\t", 2)
+		local stack = debug.traceback("\n\n -------\t Stack Traceback \t-------", 2)
 		warn(... .. if stack then stack else "")
 	end,
 	WarnAssert = function(config: boolean, condition: boolean, ...)
 		if condition or not config then
 			return
 		end
-		local stack =
-			debug.traceback("\n\n\t\t---------\t--------- \t\t\tStack Traceback\t\t\t ---------\t---------\t", 2)
+		local stack = debug.traceback("\n\n -------\t Stack Traceback \t-------", 2)
 		warn("[Allure] " .. ... .. if stack then stack else "")
 	end,
 	Error = function(...)
@@ -318,13 +321,42 @@ function Allure:Node<A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S>(
 	R: R?,
 	S: S?
 )
-	--local Nodes = { A, B, C, D, E, F, G, H, I, J, K, L, M, M, O, P, Q, R, S }
+	local Nodes = { A, B, C, D, E, F, G, H, I, J, K, L, M, M, O, P, Q, R, S }
+
+	for i, n: Node in Nodes do
+		Log.ErrorAssert(
+			CONFIG.WarnUnusualNodeTypes,
+			typeof(n) == "table",
+			Log.Format(
+				"BadType",
+				tostring(i) .. (i == 1 and "st" or (i == 2 and "nd" or (i == 3 and "rd" or "th"))) .. " dependency",
+				"Allure:Node(HERE)()()",
+				typeof(n),
+				"table"
+			)
+		)
+		Log.WarnAssert(
+			CONFIG.WarnBehavioralErrors,
+			(ref(n) and ref(n).Dependencies and ref(n).Tags),
+			"Unusual type of the "
+				.. tostring(i)
+				.. (i == 1 and "st" or (i == 2 and "nd" or (i == 3 and "rd" or "th")))
+				.. " dependency singleton passed to Allure:Node(HERE)()(): The singleton is not a Node. Use Allure:Node() on the singleton."
+				.. LogTemplates.Suppress
+		)
+	end
 
 	return function<T>(content: T)
 		Log.ErrorAssert(
 			CONFIG.WarnUnusualNodeTypes,
 			typeof(content) == "table",
 			Log.Format("BadType", "Content", "Allure:Node()(HERE)()", typeof(content), "table")
+		)
+		Log.WarnAssert(
+			CONFIG.WarnBehavioralErrors,
+			not ref(content).Tags and not ref(content).Dependencies,
+			"Content passed to Allure:Node()(HERE)() has a 'Dependencies' key and/or 'Tags' key. This will conflict with standard functionality and will be overriden."
+				.. LogTemplates.Suppress
 		);
 
 		(content :: any).__index = content --for classes, this remains the table unsealed
@@ -340,11 +372,15 @@ function Allure:Node<A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S>(
 
 			local metatable = nil :: never
 			local hiddenmeta = {
-				Dependencies = {} :: { Node },
+				Dependencies = Nodes :: { Node },
 				Tags = {
-					Priority = depcount(ref(meta).Dependencies or {}), --counts nested dependencies
+					Priority = depcount(ref(meta).Dependencies or Nodes), --counts nested dependencies
 				},
 			}
+
+			setmetatable(meta, {
+				__index = hiddenmeta,
+			})
 
 			local Node = nil :: never
 			Node = setmetatable(content, {
@@ -356,7 +392,7 @@ function Allure:Node<A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S>(
 							setmetatable(content, metatable) :: T, --1. reference singleton
 							hiddenmeta :: never --2. default (hidden) meta
 						),
-						meta --3. given meta
+						setmetatable(meta, nil) :: V --3. given meta
 					)
 				end,
 				__index = setmetatable({
@@ -367,6 +403,11 @@ function Allure:Node<A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S>(
 							Log.Format("BadType", "singleton", "Node:UseDependency(HERE)", typeof(singleton), "table")
 								.. LogTemplates.Suppress
 						)
+						Log.ErrorAssert(
+							true,
+							meta and ref(meta).Dependencies and typeof(ref(meta).Dependencies) == "table",
+							"Node:UseDependency() failed to use node meta and meta.Dependencies. This is most likely because meta and/or Dependencies have been modified. If not, make sure to create an issue on github."
+						)
 						ref(meta).Dependencies[#ref(meta).Dependencies + 1] = singleton
 						return singleton
 					end,
@@ -375,12 +416,34 @@ function Allure:Node<A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S>(
 
 						hiddenmeta.Dependencies = tree.Tree
 						metatable.__index.UseDependency = function<S, M>(self: S, singleton: M): M
+							Log.WarnAssert(
+								CONFIG.WarnUnusualNodeTypes,
+								typeof(singleton) == "table",
+								Log.Format(
+									"BadType",
+									"singleton",
+									"Node:UseDependency(HERE)",
+									typeof(singleton),
+									"table"
+								) .. LogTemplates.Suppress
+							)
+							Log.ErrorAssert(
+								true,
+								meta and ref(meta).Dependencies and typeof(ref(meta).Dependencies) == "table",
+								"Node:UseDependency() failed to use node meta and meta.Dependencies. This is most likely because meta and/or Dependencies have been modified and is not related to Node:UseTree(). If not, make sure to create an issue on github."
+							)
+
 							tree:LoadNode(singleton)
 							return singleton
 						end
 						metatable.__index.UseTree = function<S>(self: S): any
-							Log.Error "Attempt to use Node:UseTree twice. If you want to use 2 NodeTrees as node dependencies, merge them."
-							return
+							Log.WarnAssert(
+								CONFIG.WarnBehavioralErrors,
+								false,
+								"Attempt to use Node:UseTree twice. If you want to use 2 NodeTrees as node dependencies, merge them."
+									.. LogTemplates.Suppress
+							)
+							return tree
 						end
 
 						return tree
@@ -475,24 +538,25 @@ function Allure:Workers(amount: number): ...Worker
 		threads[i] = {
 			Function = function<A..., R...>(self: Worker, fn: (A...) -> R...): (A...) -> ()
 				Log.ErrorAssert(
-					true,
+					CONFIG.WarnWorkerTypes,
 					typeof(fn) == "function",
 					Log.Format("WeirdCallBack", typeof(fn), "Worker:Function(HERE)", "function")
 				)
-				return function(...)
-					local pack = { ... }
-					self:Enqueue(function()
-						fn(table.unpack(pack))
-					end)
+				return function(...: A...)
+					self:Enqueue(fn, ...)
 				end
 			end,
-			Enqueue = function(self: Worker, fn: (...any?) -> ...any?)
+			Enqueue = function<A..., R...>(self: Worker, fn: (A...) -> R..., ...: A...)
 				Log.ErrorAssert(
-					true,
+					CONFIG.WarnWorkerTypes,
 					typeof(fn) == "function",
 					Log.Format("WeirdCallBack", typeof(fn), "Worker:Enqueue(HERE)", "function")
 				)
-				table.insert(self.Queue, fn)
+
+				local pack = { ... }
+				table.insert(self.Queue :: table, function()
+					ref(fn)(unpack(pack))
+				end)
 
 				if coroutine.status(thread) == "suspended" and not YieldFlag then
 					coroutine.resume(thread, self)
@@ -513,6 +577,16 @@ function Allure:Workers(amount: number): ...Worker
 			QueueHook = {},
 
 			Yield = function(self: Worker, sec: number)
+				Log.ErrorAssert(
+					CONFIG.WarnWorkerTypes,
+					typeof(sec) == "number",
+					Log.Format("WeirdCallBack", typeof(sec), "Worker:Yield(HERE)", "number")
+				)
+				Log.WarnAssert(
+					CONFIG.WarnBehavioralErrors,
+					sec > 0 and sec < 1e+4,
+					"Attempt to yield a worker for " .. sec .. " seconds." .. LogTemplates.Suppress
+				)
 				YieldFlag = true
 				local t = task.wait(sec)
 				YieldFlag = false
@@ -553,6 +627,12 @@ function Allure:NodeTree(): NodeTree
 			errhandler: nil | <E>(self: NodeTree, Node: Node, Err: E) -> ...any?,
 			yieldthreshold: number?
 		)
+			Log.WarnAssert(
+				CONFIG.WarnBehavioralErrors,
+				#self.Tree ~= 0,
+				"NodeTree:ForEachParallel() was used on an empty tree." .. LogTemplates.Suppress
+			)
+
 			--main and threshold coroutines close themselves
 			if errhandler then
 				for number, node in self.Tree do
@@ -585,7 +665,7 @@ function Allure:NodeTree(): NodeTree
 
 				threshold = delayCallback(yieldthreshold or CONFIG.DEFAULT_YIELD_THRESHOLD, function()
 					coroutine.close(main)
-					Log.Error("Yield Threshold passed in Tree:ForEach() for Node", node)
+					Log.Error("Yield Threshold has passed in Tree:ForEach() for Node", node)
 				end)
 			end
 			return self
@@ -597,10 +677,15 @@ function Allure:NodeTree(): NodeTree
 			errhandler: nil | <E>(self: NodeTree, Node: Node, Err: E) -> ...any?,
 			yieldthreshold: number?
 		)
+			Log.WarnAssert(
+				CONFIG.WarnBehavioralErrors,
+				#self.Tree ~= 0,
+				"NodeTree:ForEach() was used on an empty tree." .. LogTemplates.Suppress
+			)
 			if errhandler then
 				for number, node in self.Tree do
 					--fn(self, node)
-					local main = delayCallback(0, xpcall, function(...)
+					local main = task.spawn(xpcall, function(...)
 						fn(self, node)
 					end, function(...)
 						errhandler(self, node, ...)
@@ -622,11 +707,11 @@ function Allure:NodeTree(): NodeTree
 
 			for number, node in self.Tree do
 				--fn(self, node)
-				local main = delayCallback(0, fn, self, node)
+				local main = task.spawn(fn, self, node)
 				local threshold = delayCallback(
 					yieldthreshold or CONFIG.DEFAULT_YIELD_THRESHOLD,
 					Log.Error,
-					"Yield Threshold passed in Tree:ForEach() for Node",
+					"Yield Threshold has passed in Tree:ForEach() for Node",
 					node
 				)
 				delayTillClosure(main, threshold)
@@ -641,6 +726,11 @@ function Allure:NodeTree(): NodeTree
 		end,
 
 		ForEachTagged = function(self: NodeTree, tag: any, fn: (self: NodeTree, node: Node) -> ...any?)
+			Log.WarnAssert(
+				CONFIG.WarnBehavioralErrors,
+				#self.Tree ~= 0,
+				"NodeTree:ForEachTagged() was used on an empty tree." .. LogTemplates.Suppress
+			)
 			for number, node in self.Tree do
 				if node.Tags[tag] then
 					fn(self, node)
@@ -660,6 +750,11 @@ function Allure:NodeTree(): NodeTree
 		end,
 
 		Sort = function(self: NodeTree, fn: (self: NodeTree, node: Node, shared: table) -> number)
+			Log.WarnAssert(
+				CONFIG.WarnBehavioralErrors,
+				#self.Tree ~= 0,
+				"NodeTree:Sort() was used on an empty tree." .. LogTemplates.Suppress
+			)
 			local cache: { Node } = {}
 			local sharedtable = {}
 
@@ -696,6 +791,14 @@ function Allure:NodeTree(): NodeTree
 		end,
 
 		NodeFromInstance = function(self: NodeTree, instance: Instance)
+			Log.WarnAssert(
+				CONFIG.WarnBehavioralErrors,
+				instance:IsA "ModuleScript",
+				"NodeTree:NodeFromInstance() received a non-modulescript instance ("
+					.. typeof(instance)
+					.. ")"
+					.. LogTemplates.Suppress
+			)
 			for k, n in self.Tree do
 				if n.Tags.Instance == instance then
 					return n
@@ -730,6 +833,11 @@ function Allure:NodeTree(): NodeTree
 		end,
 
 		LoadChildren = function(self: NodeTree, instance: Instance)
+			Log.WarnAssert(
+				CONFIG.WarnBehavioralErrors,
+				#instance:GetChildren() ~= 0,
+				"NodeTree:LoadChildren() received an instance with zero children." .. LogTemplates.Suppress
+			)
 			for i, inst in instance:GetChildren() do
 				if inst:IsA "ModuleScript" then
 					local node = require(inst) :: Node
@@ -744,6 +852,11 @@ function Allure:NodeTree(): NodeTree
 		end,
 
 		LoadDescendants = function(self: NodeTree, instance: Instance)
+			Log.WarnAssert(
+				CONFIG.WarnBehavioralErrors,
+				#instance:GetDescendants() ~= 0,
+				"NodeTree:LoadDescendants() received an instance with zero descendants." .. LogTemplates.Suppress
+			)
 			for i, inst in instance:GetDescendants() do
 				if inst:IsA "ModuleScript" then
 					local node = require(inst) :: Node
@@ -762,6 +875,12 @@ function Allure:NodeTree(): NodeTree
 			instance: Instance,
 			predicate: (self: NodeTree, Instance: Instance) -> boolean
 		): NodeTree
+			Log.WarnAssert(
+				CONFIG.WarnBehavioralErrors,
+				#instance:GetDescendants() ~= 0,
+				"NodeTree:LoadDescendantsPredicate() received an instance with zero descendants."
+					.. LogTemplates.Suppress
+			)
 			for i, inst in instance:GetDescendants() do
 				if inst:IsA "ModuleScript" and predicate(self, inst) then
 					local node = require(inst) :: Node
@@ -776,6 +895,11 @@ function Allure:NodeTree(): NodeTree
 		end,
 
 		LoadFromTree = function(self: NodeTree, tree: NodeTree)
+			Log.WarnAssert(
+				CONFIG.WarnBehavioralErrors,
+				#tree.Tree ~= 0,
+				"NodeTree:UnloadFromTree() received an empty tree." .. LogTemplates.Suppress
+			)
 			for i, node in tree.Tree do
 				if not table.find(self.Tree, node) then
 					table.insert(self.Tree, node)
@@ -785,6 +909,16 @@ function Allure:NodeTree(): NodeTree
 		end,
 
 		UnloadFromTree = function(self: NodeTree, tree: NodeTree)
+			Log.WarnAssert(
+				CONFIG.WarnBehavioralErrors,
+				#tree.Tree ~= 0,
+				"NodeTree:UnloadFromTree() received an empty tree." .. LogTemplates.Suppress
+			)
+			Log.WarnAssert(
+				CONFIG.WarnBehavioralErrors,
+				#self.Tree ~= 0,
+				"NodeTree:UnloadFromTree() was used on an empty tree." .. LogTemplates.Suppress
+			)
 			for i, node in tree.Tree do
 				local index = table.find(self.Tree, node)
 				if index then
@@ -797,11 +931,21 @@ function Allure:NodeTree(): NodeTree
 		--// Slicers
 
 		SliceNode = function(self: NodeTree, node: Node)
+			Log.WarnAssert(
+				CONFIG.WarnBehavioralErrors,
+				#self.Tree ~= 0,
+				"NodeTree:SliceNode() was used on an empty tree." .. LogTemplates.Suppress
+			)
 			table.remove(self.Tree, table.find(self.Tree, node))
 			return self
 		end,
 
 		SlicePredicate = function(self: NodeTree, predicate: (self: NodeTree, node: Node) -> boolean)
+			Log.WarnAssert(
+				CONFIG.WarnBehavioralErrors,
+				#self.Tree ~= 0,
+				"NodeTree:SlicePredicate() was used on an empty tree." .. LogTemplates.Suppress
+			)
 			local memo = {}
 
 			for i, node in self.Tree do
@@ -816,6 +960,11 @@ function Allure:NodeTree(): NodeTree
 		end,
 
 		SliceTagged = function(self: NodeTree, tag: any, type: string?, value: any?)
+			Log.WarnAssert(
+				CONFIG.WarnBehavioralErrors,
+				#self.Tree ~= 0,
+				"NodeTree:SliceTagged() was used on an empty tree." .. LogTemplates.Suppress
+			)
 			local memo = {}
 
 			for i, node in self.Tree do
@@ -836,6 +985,11 @@ function Allure:NodeTree(): NodeTree
 		end,
 
 		SliceFromChild = function(self: NodeTree, child: Instance)
+			Log.WarnAssert(
+				CONFIG.WarnBehavioralErrors,
+				#self.Tree ~= 0,
+				"NodeTree:SliceFromChild() was used on an empty tree." .. LogTemplates.Suppress
+			)
 			local memo = {}
 
 			for i, node in self.Tree do

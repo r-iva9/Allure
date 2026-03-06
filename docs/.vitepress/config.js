@@ -50,9 +50,9 @@ export default {
                   items: [
                       { text: "Nodes", link: "/course/allure/node" },
                       {
-                        text: "Workspaces",
+                        text: "Advanced",
                         items: [
-                            { text: "NodeWorkspace", link: "/course/allure/nodework" },
+                            { text: "Inside Nodes", link: "/course/allure/advanced" },
                             { text: "Multi-threading", link: "/course/allure/multithread" },
                         ]
                     },
