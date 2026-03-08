@@ -1,9 +1,9 @@
 [package]
 name = "r-iva9/allure"
-description = "Node Worker Framework for Luau"
+description = "Fully Typesafe DI IoC Node & Worker Framework for Luau.<br>The loader core of the Allure Ecosystem."
 license = "MIT"
 authors = ["r-iva9"]
-version = "1.0.0"
+version = "1.1.0"
 
 registry = "https://github.com/UpliftGames/wally-index"
 realm = "shared"

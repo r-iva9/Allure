@@ -35,8 +35,7 @@ tree1:UnloadFromTree(tree2)
 This is the prominent feature of node trees.
 
 You can filter and group nodes by slicing out the rest.
-<br>Whenever you slice a tree, a ***new tree*** is always created. They simply share resultant nodes.
-
+<br>Whenever you slice a tree, the tree is ***modified***: selected nodes are removed.
 
 The easiest example of this, is slicing a single node:
 
@@ -44,7 +43,7 @@ The easiest example of this, is slicing a single node:
 local tree = Allure:NodeTree()
     :LoadDescendants(script.Services)
 
-local tree2 = tree:SliceNode(tree:NodeFromInstance(script.Services.BattleService)) -- [!code highlight]
+tree:SliceNode(tree:NodeFromInstance(script.Services.BattleService)) -- [!code highlight]
 ```
 Our module hierarchy:
 ```
@@ -58,15 +57,13 @@ Our module hierarchy:
 ```
 Our tree:
 ```
-🌲tree                                    🌲tree2
+🌲tree                                    🌲tree
   ├─💠BattleService                         ├─💠Abilities
   ├─💠Abilities           SliceNode         ├─💠RaceService
   ├─💠RaceService           ---->           ├─💠VehicleSpawnService
   ├─💠VehicleSpawnService                   └─💠VehicleService
   └─💠VehicleService
 ```
-
-And yeah, the result is the same of a NodeTree. You can also call loader methods on this tree.
 
 ## Slicing nodes with shared ancestry
 
@@ -77,7 +74,7 @@ And yeah, the result is the same of a NodeTree. You can also call loader methods
 local tree = Allure:NodeTree()
     :LoadDescendants(script.Services)
 
-local tree2 = tree:SliceChildren(script.Services.Vehicles) -- [!code highlight]
+tree:SliceChildren(script.Services.Vehicles) -- [!code highlight]
 ```
 ```
 📂Services
@@ -89,7 +86,7 @@ local tree2 = tree:SliceChildren(script.Services.Vehicles) -- [!code highlight]
   └─📦RaceService.luau 
 ```
 ```
-🌲tree                                    🌲tree2
+🌲tree                                    🌲tree
   ├─💠BattleService                         ├─💠BattleService
   ├─💠Abilities         SliceChildren       ├─💠Abilities
   ├─💠RaceService           ---->           └─💠RaceService
@@ -97,25 +94,27 @@ local tree2 = tree:SliceChildren(script.Services.Vehicles) -- [!code highlight]
   └─💠VehicleService
 ```
 
+This case right here however could be simplified without loading unnecessary nodes firsthand via `tree:LoadDescendantsPredicate`
+
 ## Slicing nodes with a specific tag
 
 ```luau
 local tree = Allure:NodeTree()
     :LoadDescendants(script.Services)
 
-local tree2 = tree:SliceTagged("SomeTag") -- [!code highlight]
+tree:SliceTagged("SomeTag") -- [!code highlight]
 ```
 
 Additionally, you can slice nodes that have this tag set to some specific value ***type***
 
 ```luau
-local tree2 = tree:SliceTagged("SomeTag", "string")
+tree:SliceTagged("SomeTag", "string")
 ```
 
 Or even some specific value.
 
 ```luau
-local tree2 = tree:SliceTagged("SomeTag", nil, 200)
+tree:SliceTagged("SomeTag", nil, 200)
 ```
 
 ## Slicing nodes from predicate
@@ -128,7 +127,7 @@ For a straightforward example, let's slice nodes that end on "Service" with thei
 local tree = Allure:NodeTree()
     :LoadDescendants(script.Services)
 
-local tree2 = tree:SlicePredicate(function(self, node) -- [!code highlight]
+tree:SlicePredicate(function(self, node) -- [!code highlight]
     return not string.match(node.Tags.Instance.Name, "Service$") -- [!code highlight]
 end) -- [!code highlight]
 ```
@@ -142,13 +141,15 @@ end) -- [!code highlight]
   └─📦RaceService.luau 
 ```
 ```
-🌲tree                                    🌲tree2
+🌲tree                                    🌲tree
   ├─💠BattleService                         └─💠Abilities
   ├─💠Abilities         SlicePredicate
   ├─💠RaceService           ---->
   ├─💠VehicleSpawnService
   └─💠VehicleService
 ```
+
+This example here could also directly be simplified via `tree:LoadDescendantsPredicate`
 
 ## Cloning and Negation
 
@@ -164,10 +165,19 @@ By unloading nodes from a slice, we can negate anything.
 local tree = Allure:NodeTree()
     :LoadDescendants(script.Services)
 
-local tree2 = tree:SliceChildren(script.Services.Vehicles)
+local tree2 = tree:Clone()
+tree2:SliceChildren(script.Services.Vehicles)
 ```
 ```
 🌲tree                                    🌲tree2
+  ├─💠BattleService                         ├─💠BattleService
+  ├─💠Abilities             Clone           ├─💠Abilities
+  ├─💠RaceService           ---->           ├─💠RaceService
+  ├─💠VehicleSpawnService                   ├─💠VehicleSpawnService
+  └─💠VehicleService                        └─💠VehicleService
+```
+```
+🌲tree2                                   🌲tree2
   ├─💠BattleService                         ├─💠BattleService
   ├─💠Abilities         SliceChildren       ├─💠Abilities
   ├─💠RaceService           ---->           └─💠RaceService

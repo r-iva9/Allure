@@ -70,7 +70,7 @@ end
 return node()
 ```
 
-This utility function present is in no way messing up your content table and meta. It just exists there as an addon.
+This utility function being present is in no way messing up your content table and meta. It just exists there as an addon while you are making the node.
 
 ## References
 
@@ -83,7 +83,7 @@ local node = Allure:Node() {} {
 
 local Promise = node:UseDependency(require(path.to.Promise))
 
-node.Meta.Name = "NotMyNode" 
+print(node.Meta.Name) -- [!code highlight]
 
 function node:OnInit()
 end
@@ -91,9 +91,27 @@ end
 return node()
 ```
 
+Actually, we can already reference `Name` from Meta normally via
+
+```luau
+print(node.Name)
+```
+
+So this is starting the reference chain:
+
+```luau
+Content -> Meta
+```
+
+We've also got utilities here:
+
+```luau
+Content -> Utilities -> Meta
+```
+
 ---
 
-`node.HiddenMeta` is a peculiar sight. This table is also meta, but it does not appear in the end type of the node, and it originally is set by Allure:
+`node.HiddenMeta` is a peculiar sight. This table is also meta, but it does not appear in the end type of the node, and it originally is made by Allure:
 ```luau
 {
     Dependencies = {...},
@@ -105,132 +123,100 @@ return node()
 
 When you finalize the node it also becomes a part of the node.
 
-And before that, you can already reference the contents remotely:
+And before that, you can also reference the contents remotely:
 
 ```luau
 print(node.Tags.Priority)
 ```
 
-The reference chain is as so:
+So we're continuing our reference chain:
 
 ```luau
 Content -> Utilities -> Meta -> HiddenMeta
 ```
 
-The resultant node has the type
+`node.HiddenMeta` can be useful when you need a secret to hide from the typesolver, or just modify whatever Allure set up.
 
+## Tagging
+
+As you've seen, Tags are within `HiddenMeta`, so to tag an instance, create a new tag within `node.HiddenMeta.Tags`.
+<br>But we all need shortcuts.
+
+Add or change a tag:
 ```luau
-Content & Meta
+local node = Allure:Node() {} {}
+
+node:Tag("Children", 10)
+node:Tag("Instance", script)
+
+node:Tag("SomeTagForRemoval", nil)
+
+return node()
 ```
 
-## Presets
-
-The content table and metadata you pass into `NodeWorkspace` remains there, you create both tables yourself, and then mutate them.
-<br>So you can pass something default, like values or secret values
-
+Get a tag:
 ```luau
-local module, dep1 = Allure:NodeWorkspace(require(path.to.dep1)) {
-    a = 10,
-    onInit = function(self)
-        print("Module initialized")
-    end
-} {
-    Name = "exampleModule",
-    License = "MIT",
+local node = Allure:Node() {} {}
 
-    secret = 10,
+node:Tag("Children", 10)
+node:Tag("Instance", script)
+
+print(node:GetTag("Children")) --10
+
+return node()
+```
+
+## Metatables
+
+Skip this part, if you're unfamiliar with metatables.
+
+You could tell, these utilities and the reference chain is achieved via metatables.
+<br>Setting a metatable for our node, to appear after finalization becomes a challenge.
+
+No more: finalization sets the metatable to a specific value, originally `nil`.
+
+This value can be modified via our utilities, again:
+
+Setting the metatable of the future node:
+```luau
+local node = Allure:Node() {} {}
+
+node:UseMetatable {
+    __index = rawget,
+    __newindex = rawset
 }
 
-return module()
+return node()
 ```
 
-Literally didn't have to use the modulescript normally in this case, I could just do this:
-
+Overriding it in bulk:
 ```luau
-return Allure:Node(require(path.to.dep1)) {
-    a = 10,
-    onInit = function(self)
-        print("Module initialized")
-    end
-} {
-    Name = "exampleModule",
-    License = "MIT",
+local node = Allure:Node() {} {}
 
-    secret = 10,
-}
-```
-
-# Some utilities are also given
-
-You might've noticed that I've used `module:UseDependency`
-<br>And no, this function does not exist in the module after creating the node. Not even in the (`nil`) metatable.
-
-So let's cover some other utilities that `NodeWorkspace` gives you
-
-## `.Meta`
-
-If you lost the metadata table, this is the direct reference
-
-```luau
-local module = Allure:NodeWorkspace() {} {a = 10}
-
-module.Meta.a += 10
-```
-
-## `:ModifyMeta`
-
-You can change the meta in bulk, with a table:
-
-```luau
-local module = Allure:NodeWorkspace() {} {a = 10}
-
-module:ModifyMeta {
-    b = 100,
-    Name = "Module",
-    Version = "1.0.1",
-
-    a = module.Meta.a + 20
-}
-```
-
-## `:GetDependencyCount`
-
-This is one of the most usable utilities that Allure gives you.
-<br>This function counts *ALL* dependencies, even dependencies inside of dependencies.
-
-```luau
-local module = Allure:NodeWorkspace() {} {a = 10}
-
-module.Tags.AmountDependencies = module:GetDependencyCount()
-```
-
-## `:SetPriority`
-
-Usually Priority is a Tag that Allure presets immediately during Node creation.
-<br>And it's set by default to `-node:GetDependencyCount()`
-
-But since priority is just a tag, this is just shorthand to changing it.
-```luau
-local module = Allure:NodeWorkspace() {} {a = 10}
-
-module:SetPriority(-10)
-module.Tags.Priority += 10
-```
-
-## `:Zero`
-
-If you're in favor of creating nodes without useless metadata, you can use this function to finish, create the node instead of calling the workspace as a function:
-```luau
-local module, dep1 = Allure:NodeWorkspace(
-    require(path.to.dep1)
-) {} {
-    Name = "Test"
+node:UseMetatable {
+    __newindex = rawset
 }
 
-local dep2 = module:UseDependency(require(path.to.dep1))
+node:OverrideMetatable {
+    __index = {
+        Calculate = function(self, a, b) end
+    },
+}
 
-function module:onInit()
-end
-
-return module:Zero()
+return node()
 ```
+
+Getting it:
+```luau
+local node = Allure:Node() {} {}
+
+node:UseMetatable {
+    __newindex = rawset
+}
+
+local mt = node:GetMetatable()
+
+return node()
+```
+
+This metatable ***is not present before finalization*** and will be applied only upon then.

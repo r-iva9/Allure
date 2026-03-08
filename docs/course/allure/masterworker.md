@@ -10,11 +10,11 @@ This design can be done in various ways. You can have a single modulescript as a
 ```luau [Master.luau]
 local Allure = require(path.to.Allure)
 
-local module = Allure:NodeWorkspace() {} {
+local module = Allure:Node() {} {
     Name = "Master"
 }
 
-local worker1, worker2, worker3 = module:Threads(3)
+local worker1, worker2, worker3 = Allure:Workers(3)
 
 function module:Work()
     -- Get the worker with minimal workload
@@ -48,11 +48,11 @@ Or actually, what stops us from making even more workers, just storing them in a
 ```luau [Master.luau]
 local Allure = require(path.to.Allure)
 
-local module = Allure:NodeWorkspace() {} {
+local module = Allure:Node() {} {
     Name = "Master"
 }
 
-local workers = {module:Threads(10)} -- [!code highlight]
+local workers = {Allure:Workers(10)} -- [!code highlight]
 
 function module:Work()
     -- Get the worker with minimal workload
@@ -87,11 +87,11 @@ But what if we have more than enough, or less than enough workers?
 ```luau [Master.luau]
 local Allure = require(path.to.Allure)
 
-local module = Allure:NodeWorkspace() {} {
+local module = Allure:Node() {} {
     Name = "Master"
 }
 
-local workers = {module:Threads(1)}
+local workers = {Allure:Workers(1)}
 
 function module:Work()
     -- Get the worker with minimal workload
@@ -128,7 +128,7 @@ function module:Work()
     -- Add a new worker if we didn't find a good worker 
     -- (if we don't have enough)
     if not worker then 
-        worker = module:Threads(1) 
+        worker = Allure:Workers(1) 
         workers[#workers=1] = worker
     end
 
@@ -163,14 +163,14 @@ This becomes kind of a mess, especially when you have different workers with dif
 local Allure = require(path.to.Allure)
 
 -- Let's expose the workload of each worker so the master could be aware
-local module = Allure:NodeWorkspace() {
+local module = Allure:Node() {
     Workload = 0 -- [!code highlight]
 } {
     Name = "Worker1"
 }
 
 -- The main thread of this Worker Node
-local Thread = module:Threads(1)
+local Thread = Allure:Workers(1)
 
 -- Queue hook to lower workload when a task is finished
 Thread.QueueHook.lowerWorkload = function()
@@ -190,7 +190,7 @@ return module()
 ```luau [Master.luau]
 local Allure = require(path.to.Allure)
 
-local module = Allure:NodeWorkspace() {} {
+local module = Allure:Node() {} {
     Name = "Master"
 }
 

@@ -367,7 +367,7 @@ function Allure:Node<A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S>(
 			Log.ErrorAssert(
 				CONFIG.WarnUnusualNodeTypes,
 				typeof(meta) == "table",
-				Log.Format("BadType", "Metadata", "Allure:Node()()(HERE)", typeof(meta), "table")
+				Log.Format("BadType", "Meta", "Allure:Node()()(HERE)", typeof(meta), "table")
 			)
 
 			local metatable = nil :: never

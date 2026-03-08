@@ -1,145 +1,159 @@
-# Multi-threading in Nodes
+# Workers and multi-threading
 
-I did not forget about multithreading and workers. It's a Worker framework, you possibly came here because of that.
-<br>So here we are.
+Allure has "Worker" in it's title, you possibly came here because of that.
+<br>It really provides support for workers, and that's a big feature that comes in hand with other parallel features.
 
-This is a bonus feature for Nodes, which allows you to create threads, enqueue functions, or make entire master-worker setups with microservices, queues and management of worker workload.
+This is a bonus feature, which allows you to create workers, enqueue functions, or make entire master-worker setups with microservices, queues and management of worker workload.
 
-## `:Threads`
+## `Allure:Workers`
 
-This is the last utility given in `NodeWorkspaces` that I specifically didn't tell you about, because I wanted to divide this into an another file for this documentation.
+A worker is a ***specific object*** that wraps a coroutine thread.
+<br>It's merged with a queue and some utilities, like enqueuing and dequeuing.
 
 ```luau
-local module = Allure:NodeWorkspace() {} {}
-
-function module:onInit()
-end
-
-local thread1, thread2, thread3 = module:Threads(3) -- [!code highlight]
-
-return module()
+local worker1, worker2, worker3 = Allure:Workers(3)
 ```
 
-`nodeWorkspace:Threads(n)` creates `n` amount of threads and returns them.
-<br>Specifically, this is a ***custom thread object*** with already set management of queues. Let's dive in.
+It creates and returns the specified amount of workers.
 
-## Enqueuing functions via `Thread:Enqueue()`
+## Enqueuing functions
 
-Any Thread has it's own `Thread.Queue` which is an array table of functions.
+A worker has `Worker.Queue` - a table of functions, tasks to be executed.
 
-These functions are sequentially consumed by the `coroutine` thread at the core of the `Thread`.
+Tasks are executed one by one, and you can always add a new task:
 
 ```luau
-local module = Allure:NodeWorkspace() {} {}
+local worker = Allure:Workers(1)
 
-local thread1, thread2 = module:Threads(2)
-
-thread1:Enqueue(function()
-    print("This is being executed on thread1!")
+worker:Enqueue(function()
+    print("Working!")
 end)
 
-thread1:Enqueue(function()
-    print("This is also executed on thread1!")
+worker:Enqueue(function()
+    print("Working again!")
 end)
-
-return module()
 ```
 ::: code-group
 ``` [Output]
-This is being executed on thread1!
-This is also executed on thread1!
+Working!
+Working again!
 ```
 :::
 
-## Yielding inside of threads
+`:Enqueue` also accepts arguments, if you have some function predefined:
+
+```luau
+local fn = function(a, b)
+    print(a + b)
+end
+
+worker:Enqueue(fn, 10, 15)
+worker:Enqueue(fn, 25, -10)
+```
+::: code-group
+``` [Output]
+25
+15
+```
+:::
+
+## Dequeuing
+
+Analogically, dequeue the *last enqueued task*:
+
+```luau
+local worker = Allure:Workers(1)
+
+worker:Enqueue(function()
+    print("Working!")
+end)
+
+worker:Dequeue()
+```
+
+And dequeue a specific function at position `n` via `:Dequeue(n)`
+
+But the code snippet above possibly won't work, because the function is consumed *immediately*, so nothing will be dequeued.
+<br>We need a waiting method.
+
+## Yielding inside of worker tasks
 
 The problem is, `task.wait` *will stop* the running task but *will not stop* the queue.
 <br>So here we have a custom yielding method that entirely replicates `task.wait` but also sets a flag.
 
 ```luau
-local module = Allure:NodeWorkspace() {} {}
+local worker = Allure:Workers(1)
 
-local thread1, thread2 = module:Threads(2)
-
-thread1:Enqueue(function()
-    print("This is being executed on thread1!")
-    thread1:Yield(10) -- [!code highlight]
+worker:Enqueue(function()
+    print("Working")
+    worker:Yield(5) -- [!code highlight]
 end)
 
-thread1:Enqueue(function()
-    print("This is also executed on thread1 after 10 seconds!")
-end)
+worker:Enqueue(function() end)
 
-return module()
+worker:Dequeue()
 ```
 
-Pretty self-explanatory.
+Now our first task will yield the worker for 5 seconds, and our dequeue will actually find the time to dequeue the second task.
 
 ## Hooking functions to the queue
 
-Any Thread has `.Queue` and `.QueueHook`.
+Any Worker has `.Queue` and `.QueueHook`.
 <br>All functions within `.QueueHook` are called whenever some task is ***dequeued***.
 
-All hooks are called **on the coroutine thread**.
+Notice, all hooks are called **on the coroutine thread**.
 
 ```luau
-local module = Allure:NodeWorkspace() {} {}
+local worker1, worker2 = Allure:Workers(2)
 
-local thread1, thread2 = module:Threads(2)
-
-thread1.QueueHook["test"] = function() -- [!code highlight]
+worker1.QueueHook["test"] = function() -- [!code highlight]
     print("Some task was dequeued") -- [!code highlight]
 end -- [!code highlight]
 
-thread1:Enqueue(function()
-    print("This is the first task for thread1")
+worker1:Enqueue(function()
+    print("This is the first task for worker1")
 end)
-
-return module()
 ```
 ::: code-group
 ``` [Output]
-This is the first task for thread1
+This is the first task for worker1
 Some task was dequeued
 ```
 :::
 
-## Killing the Thread
+## Killing the Worker
 
-To kill the Thread, simply call `Thread:Kill()`
-<br>This will close the `Thread.Coroutine`, empty the `Thread.Queue` and set some flags.
+To kill the Worker, simply call `Worker:Kill()`
+<br>This will close the `Worker.Coroutine`, empty the `Worker.Queue` and set some flags.
 
 ```luau
-local module = Allure:NodeWorkspace() {} {}
+local worker = Allure:Workers(1)
 
-local thread1 = module:Threads(1)
-
-thread1:Enqueue(function()
-    print("This is the first task for thread1")
+worker:Enqueue(function()
+    print("This is the first task for worker")
+    worker:Yield(2)
 end)
 
-thread1.QueueHook["consumeAndClose"] = function()
-    thread1:Kill() -- [!code highlight]
+worker.QueueHook["consumeAndClose"] = function()
+    worker:Kill() -- [!code highlight]
 end
-
-return module()
 ```
 
-## Threads in Worker Nodes
+## Workers within Nodes
 
-Threads aren't just some arbitrary utility given.
-<br>You can easily create a Worker node by having <ins>*all functions enqueue themselves into threads*</ins>, or a Master node with Worker children nodes, or Microservice Nodes, etc.
+Workers aren't just some arbitrary utility given.
+<br>You can easily create a Worker node by having <ins>*all functions enqueue themselves into workers*</ins>, or a Master node with Worker children nodes, or Microservice Nodes, etc.
 
 We have a shortcut for that.
 
 ```luau
-local module = Allure:NodeWorkspace() {} {}
+local module = Allure:Node() {} {}
 
-local thread1 = module:Threads(1)
+local worker = module:Workers(1)
 
-module.AsyncFunc = thread1:Function(function(self, a, b) -- [!code highlight]
-    print("This is being executed on thread1!") -- [!code highlight]
-    return a + b -- [!code highlight]
+module.AsyncFunc = worker:Function(function(self, a, b) -- [!code highlight]
+    print("This is being executed on worker!") -- [!code highlight]
+    print(a + b) -- [!code highlight]
 end) -- [!code highlight]
 
 return module()
@@ -149,11 +163,15 @@ return module()
 local Node = require(path.to.Node)
 
 Node:AsyncFunc(10, 5)
+Node:AsyncFunc(7, 14)
 ```
 :::
 ::: code-group
 ``` [Output]
-This is being executed on thread1!
+This is being executed on worker!
+15
+This is being executed on worker!
+21
 ```
 :::
 

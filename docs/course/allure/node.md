@@ -31,7 +31,7 @@ return Allure:Node() {} {} ()
 ```
 
 What this does, is create an empty Node.
-<br>This node, despite being empty, can already be used with Dependencies, tags, as a Class, and is suited for loaders.
+<br>This node, despite being empty, can already be used with Dependencies, Tags, as a Class, and is suited for loaders.
 
 It looks like this:
 
@@ -63,7 +63,7 @@ return Allure:Node(dep, dep2, dep3) (module) {} ()
 
 These dependencies are then used where Allure needs them to be.
 
-Additionally, if you never wanted to modify the source of your module, you can make it a Node outside:
+Additionally, if you never wanted to modify the source of your module, you can always make it a Node outside:
 
 ```luau
 local Allure = require(path.to.Allure)
@@ -92,17 +92,18 @@ end
 
 return Allure:Node(dep, dep2) (module) {
     Name = "TestModule",
-    SecretValue = 76234
+    Instance = script
 } ()
 ```
 
 Like a convention, you can save all the unnecessary data to the source code, in the meta.
-<br>Like Name, Version or License.
+<br>Like Name, Version, License, links. <br>Stuff like `Instance = script` is useful, and while Allure itself tries to tag the Node with it's instance when it can, immediately doing this is considerably useful.
 
 ```luau
 Allure:Node() (yourPackage) {
     Name = "YourPackage",
-    Version = "1.1.0"
+    Version = "1.1.0",
+    Instance = script,
 } ()
 ```
 

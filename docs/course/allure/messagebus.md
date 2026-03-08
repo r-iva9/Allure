@@ -20,7 +20,7 @@ If we're realizing a message bus for this, then we need a simple module through 
 ```luau [MessageBus.luau]
 local Allure = require(path.to.Allure)
 
-local module = Allure:NodeWorkspace() {} {
+local module = Allure:Node() {} {
     Name = "Message Bus"
 }
 
@@ -35,11 +35,11 @@ end
 function module:Event(serviceName: string, taskName: string, ...)
     assert(Tree, "Message Bus not initialized!")
     return Tree
-        :SlicePredicate(function(self, node) --Get nodes by name
+        :NodeFromPredicate(function(self, node) --Get node by name
             return node.Name == serviceName 
                 or node.Tags.Instance.Name == serviceName
         end)
-        .Tree[1][taskName](...) --Call the task
+        [taskName](...) --Call the task
 end 
 
 return module()
@@ -78,7 +78,7 @@ return Allure:Node() {
     Multiply = function(self, a, b) -- [!code highlight]
         return self.MessageBus:Event("Multiplicator", "Multiply", a, b) -- [!code highlight]
     end -- [!code highlight]
-} {}
+} {} ()
 ```
 ```luau [Multiplicator.luau]
 local Allure = require(path.to.Allure)
@@ -94,16 +94,16 @@ return Allure:Node() {
     Multiply = function(self, a, b)
         return a * b
     end
-} {}
+} {} ()
 ```
 :::
 
-This solves dependency cycles and 2 modules can use each other. Isn't this neat?
+This ***solves dependency cycles*** and 2 modules can use each other. Isn't this neat?
 
 ## Consumer - Producer (Publish/Subscribe)
 
 Consumers and Producers can be 2 different types of Nodes.
-<br>Our message bus can be a *wrapper* of Allure's `Node` and `NodeWorkspace`.
+<br>Our message bus can be a *wrapper* of Allure's `Node`.
 
 Or we can make it even simpler by making the standard `:Subscribe` and `:Publish`.
 
@@ -125,7 +125,9 @@ return Allure:Node() {
     OnInit = function(self, tree)
         self.Tree = tree
     end,
-    OnStart = function(...) end,
+    OnStart = function(...) 
+        --do something!
+    end,
 
     Subscribe = function(self, topic, func)
         -- Create the topic if it doesn't exist
@@ -145,7 +147,7 @@ return Allure:Node() {
             subscriber(...)
         end
     end
-} {}
+} {} ()
 ```
 :::
 
@@ -160,7 +162,7 @@ local tree = Allure:NodeTree()
     :ForEach(function(self, node)
         node:OnInit(self, self:NodeFromInstance(script.MessageBus))
     end)
-    :ForEach(function(self, node)
+    :ForEachParallel(function(self, node)
         node:OnStart()
     end)
 ```
@@ -184,7 +186,7 @@ return Allure:Node() {
     SpawnVehicle = function(self, name, position)
         --...
     end
-} {}
+} {} ()
 ```
 ```luau [Multiplicator.luau]
 local Allure = require(path.to.Allure)
@@ -207,11 +209,11 @@ return Allure:Node() {
             Vector3.new(10, 10, 10)) -- [!code highlight]
         --...
     end
-} {}
+} {} ()
 ```
 :::
 
 ### Enjoy Allure!
 
 Thank you for paying attention and taking your time to read these docs or even trying out Allure, despite a very early version and many features lacking.
-<br>Allure is one of my first published open source projects and it has a very long way to go!
+<br>Allure is one of my first huge published open source projects and the Allure Ecosystem has a long way to go!

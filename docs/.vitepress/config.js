@@ -2,7 +2,7 @@ export default {
   base: '/Allure/',
   title: "Allure",
   // titleTemplate: ":title ...",
-  description: "Fully Typesafe Node & Worker Framework for Luau",
+  description: "Fully Typesafe DI IoC Node & Worker Framework for Luau.<br>The loader core of the Allure Ecosystem.",
   head: [
     ["link", { rel: "icon", type: 'image/svg+xml', href: "/Allure/shortlogo.svg" }]
   ],
@@ -49,13 +49,8 @@ export default {
                   text: "Allure",
                   items: [
                       { text: "Nodes", link: "/course/allure/node" },
-                      {
-                        text: "Advanced",
-                        items: [
-                            { text: "Inside Nodes", link: "/course/allure/advanced" },
-                            { text: "Multi-threading", link: "/course/allure/multithread" },
-                        ]
-                    },
+                      { text: "Advanced", link: "/course/allure/advanced" },
+                      { text: "Workers and multi-threading", link: "/course/allure/multithread" },
                     {
                         text: "Trees",
                         items: [
