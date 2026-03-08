@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <b><i>Fully Typesafe Node & Worker Framework for Luau.</i></b> </br>
+  <b><i>Fully Typesafe DI IoC Node & Worker Framework for Luau.<br>The loader core of the Allure Ecosystem.</i></b> </br>
   <!--<i>Inspired by -->
 </p>
 
@@ -16,84 +16,81 @@
 </div>
 
 > [!IMPORTANT]
-> <h2>Allure is incredibly fresh and new</h2>
-> This means that Allure has some unfinished features, documentation, unremoved bloat, and possibly some overlooked issues.
+> <h2>Allure is fresh and new</h2>
+> This means that Allure possibly has some unfinished features and overlooked issues.
 >
 > ***Allure has a long way to go and will be tied to the Allure Ecosystem. There be dragons.***
 
 ## 📦 Installation
 Install via wally:
 ```
-Allure = "r-iva9/allure@1.0.0"
+Allure = "r-iva9/allure@1.1.0"
 ```
-(Package description is misleading, sorry for that!)
 
 # 🍃 Nodes and Boilerplate
 
-### 💠 A Node
-***Is a modulescript singleton in your game.***
-<br>Nodes have metadata: their own name, version, description.
+### 💠 *A Node is a singleton in your game with added overhead, suited for Allure.*
 
 Nodes can 
-  - rely on threads,
+  - rely on Workers,
   - be used as dependencies for other nodes,
-  - be used in dependency trees
-  - tagged
+  - be used in dependency trees,
+  - be tagged,
+  - inject dependencies,
+  - use NodeTrees inside,
   - and more!
+
 ### Minimum boilerplate
+Is none! You can successfuly use Allure without any boilerplate inside of modulescripts.
+<br>But if you want to setup singletons firsthand, you can make them nodes right there:
 ```luau
 local Allure = require(path.to.Allure)
 
 local module = {}
 
-return Allure:Node()(module) {}
+return Allure:Node()(module){} ()
 ```
+
 ### Injecting dependencies
 ```luau
 local Allure = require(path.to.Allure)
 
-local dependency1, dependency2 = require(path.to.dependency), require(path.to.dependency)
-local module = {}
+local module, dep1, dep2 = Allure:Node(
+  require(path.to.dep1), require(path.to.dep2)
+) {} {}
 
-return Allure:Node(dependency1, dependency2)(module) {}
-```
-Creating a node like this gives it the necessary additions, dependencies and *metadata*.
-<br>You let Allure control the overhead of your singletons, leaving you to only fill them with contents.
+local dep3 = module:UseDependency(require(path.to.dep3))
 
-For more functionality, you can slowly work on a Node via a NodeWorkspace:
-
-```luau
-local Allure = require(path.to.Allure)
-
-local module = Allure:NodeWorkspace() {} {}
-local dep1 = module:UseDependency(require(path.to.dep1))
-local dep2 = module:UseDependency(require(path.to.dep2))
-
--- Turn the workspace into a node by calling it like a function:
 return module()
 ```
-This workspace already does some necessities for you, like setting `__index` inside of `module` to `module`.
-### Multithreading in Nodes
+Creating a node like this gives it the necessary additions, dependencies and *meta*.
+<br>You let Allure control the overhead of your singletons, leaving you to only fill them with contents.
 
-Node workspaces allow you to inject Threads into the Node, enqueue functions, attach hooks, clear the queue, and more.
+Nodes are suited for workflows, such as classes, with boilerplate already set up.
+
+### Workers
+
+Workers as a bonus feature allow you to easily use multi-threading.
+<br>And not just inside of Nodes.
+
 ```luau
 local Allure = require(path.to.Allure)
 
-local module = Allure:NodeWorkspace() {} {}
+local module = Allure:Node() {} {}
 
-local thread1, thread2 = module:Threads(2)
+local worker1, worker2 = module:Workers(2)
 
-thread1:Enqueue(function()
+worker1:Enqueue(function()
   print("This is called on thread1!")
 
   -- Since yielding coroutines normally doesn't do the thing
-  -- for yielding and queries, threads have a custom Yield:
-  thread1:Yield(10)
+  -- for yielding and queries, workers have a custom Yield:
+  worker1:Yield(10)
 end)
 
--- Threads allow you to create such functions
+-- Workers allow you to create such functions
 -- That when called, the function is automatically enqueued!
-module.AsyncFunc = thread2:Function(function(self, a, b)
+module.AsyncFunc = worker2:Function(function(self, a, b)
   return a + b
 end)
 
@@ -109,25 +106,30 @@ Think of Node Trees as instances of loaders:
 - and an another for Controllers
 
 The point is, you can apply ***different lifecycle hooks*** on different node trees, call different functions, order differently, and more!
-### Basic loader methods
+### Classic Framework Ignition
 ```luau
 local Allure = require(path.to.Allure)
 
 local tree = Allure:NodeTree()
-
--- Children singletons of these folders are loaded as surface-level nodes of the tree
--- Additionally, the nodes get tagged with Instance = their modulescript
-tree:LoadChildren(script.Services)
-tree:LoadChildren(script.Providers)
-
-tree:ForEach(function(node)
-  node:OnInit()
-end)
+  :LoadDescendants(script)  -- Load all descendant modules
+  :ForEach(
+    function(self, node)  -- Initialize them sequentially
+      node:OnInit()
+    end,
+    function(self, node, err) -- with an error handler
+      warn(node, "ran into an error during OnInit", err)
+    end,
+  5) -- and a yield threshold of 5 seconds
+  :ForEachParallel(
+    function(self, node)  -- Start them in parallel
+      node:OnStart()
+    end,
+    function(self, node, err) -- with an error handler
+      warn(node, "ran into an error during OnStart", err)
+    end)
 ```
-Since you can have multiple trees, the point of singletons still stands:
-<br>***A modulescript node, existing in multiple node trees, will share all of it's contents, including metadata and <ins>tags</ins>***
 
-### Slicing NodeTrees
+### Slicing, Merging, Cloning NodeTrees
 ```luau
 local Allure = require(path.to.Allure)
 
@@ -139,27 +141,27 @@ maintree:ForEach(function(node)
   node.Tags.DepCount = #node.Dependencies
 end)
 
--- Now let's slice the tree and get a new tree with only those nodes,
--- That have more than 2 dependencies
-local depTree = maintree:SlicePredicate(function(self, node)
+-- Now let's clone the tree and slice it so it has only such nodes,
+-- that have more than 2 dependencies
+local depTree = maintree:Clone()
+depTree:SlicePredicate(function(self, node)
   return node.Tags.DepCount > 2
 end)
 
 -- depTree is a different tree, but it shares nodes with maintree
--- This means exactly what you are thinking of, we can use all the
--- same loader methods on it, too:
+-- We can use all the same loader methods on it, too:
 depTree:ForEach(function(node)
   node:OnInit()
 end, function(node, err)
   warn("An error has occured in", node.Tags.Instance.Name)
 end)
---^^ Additionally, you can list a second function for the :ForEach call
--- to act as an Error Handler!
 ```
 
 ## License
 Allure is shared and released with the MIT License.
 </br>Give me a shoutout if you want!
+
+*Version 1.1.0<br>Latest edit: 03/08/26 (mm/dd/yy)*
 
 <p align="center">
   <img width="170" height="150" src="https://github.com/m-at1/Allure/blob/main/images/shortlogo.png?raw=true" alt="Logo">
