@@ -1,6 +1,6 @@
 [package]
 name = "r-iva9/allure"
-description = "Fully Typesafe DI IoC Node & Worker Framework for Luau.<br>The loader core of the Allure Ecosystem."
+description = "Fully Typesafe DI IoC Node & Worker Framework for Luau. The loader core of the Allure Ecosystem."
 license = "MIT"
 authors = ["r-iva9"]
 version = "1.1.0"
